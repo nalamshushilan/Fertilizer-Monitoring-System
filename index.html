@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fertilizer & Dealer Management System</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Standalone Client Libraries for PDF & Excel export -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="nav-brand">
+        <div class="brand-icon">🌱</div>
+        <div>
+          <div class="brand-title">Fertilizer Monitoring System</div>
+          <div class="brand-sub">Farmer • Dealer Register • Sales</div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav id="navTabs" class="nav-links">
+        <button type="button" class="nav-btn active" data-view="dashboard">📊 Dashboard</button>
+        <button type="button" class="nav-btn" data-view="form1" id="tabForm1">🌾 Farmer Info</button>
+        <button type="button" class="nav-btn" data-view="form2" id="tabForm2">📦 Sales Info</button>
+        <button type="button" class="nav-btn" data-view="form3" id="tabForm3">📑 Register</button>
+        <button type="button" class="nav-btn" data-view="form4" id="tabForm4">🏢 Dealer Admin</button>
+      </nav>
+
+      <!-- User Identity & Logout -->
+      <div id="userProfileBar" class="user-badge hidden">
+        <span id="userRoleBadge" class="user-role-pill"></span>
+        <span id="userNameDisplay"></span>
+        <button type="button" id="btnLogout" class="btn-logout" title="Sign Out">✕</button>
+      </div>
+
+      <!-- Login CTA when logged out -->
+      <button type="button" id="btnLoginNav" class="nav-btn" style="border-color: var(--border);">
+        🔑 Sign In
+      </button>
+    </header>
+
+    <!-- Global App Container -->
+    <div class="container">
+      <!-- Alerts container -->
+      <div id="globalAlert" class="alert hidden"></div>
+
+      <!-- ======================================================== -->
+      <!-- VIEW: AUTHENTICATION / LOGIN                             -->
+      <!-- ======================================================== -->
+      <section id="viewAuth" class="auth-box hidden">
+        <div class="auth-header">
+          <div style="font-size: 2.2rem; margin-bottom: 8px;">🔐</div>
+          <h2 class="auth-title">System Sign In</h2>
+          <p style="color: var(--text-muted); font-size: 0.86rem;">
+            Dealers login with Registration Number. Admins login with Admin Key.
+          </p>
+        </div>
+
+        <!-- Role Toggle for Login -->
+        <div class="radio-group" style="justify-content: center; margin-bottom: 20px;">
+          <label class="radio-label">
+            <input type="radio" name="loginRole" value="dealer" checked />
+            Dealer Login
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="loginRole" value="admin" />
+            Admin / Superadmin
+          </label>
+        </div>
+
+        <form id="loginForm">
+          <!-- Dealer Credential Inputs -->
+          <div id="dealerLoginFields">
+            <div class="form-group">
+              <label for="loginRegNo">Dealer Registration Number <span class="req">*</span></label>
+              <input type="text" id="loginRegNo" placeholder="e.g. DLR-001" autocomplete="username" />
+            </div>
+            <div class="form-group">
+              <label for="loginDealerPass">Password <span class="req">*</span></label>
+              <input type="password" id="loginDealerPass" placeholder="Enter dealer password" autocomplete="current-password" />
+            </div>
+          </div>
+
+          <!-- Admin Key Input -->
+          <div id="adminLoginFields" class="hidden">
+            <div class="form-group">
+              <label for="adminKeyInput">Admin / Superadmin Key <span class="req">*</span></label>
+              <input type="password" id="adminKeyInput" placeholder="Enter admin password (default: admin123)" />
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+            Sign In & Continue
+          </button>
+        </form>
+
+        <div style="margin-top: 20px; font-size: 0.8rem; color: var(--text-muted); text-align: center; border-top: 1px solid var(--border); padding-top: 14px;">
+          💡 <em>Demo: Dealer <code>DLR-001</code> / pass <code>dealer123</code> • Admin: <code>admin123</code></em>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- VIEW: DASHBOARD (Ward / Block / Union / Upazila Filter)   -->
+      <!-- ======================================================== -->
+      <section id="viewDashboard" class="view-content">
+        <!-- Filter Bar -->
+        <div class="filter-card">
+          <div class="filter-header">
+            <div>
+              <div class="filter-title">🔍 Dashboard Filters</div>
+              <div class="filter-sub">Filter data by Upazila, Union, Block, Ward, and Date range</div>
+            </div>
+            <button type="button" id="btnPrintSummary" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85rem; height: 38px; background: #1e3a8a; border-color: #2563eb; color: white;">
+              🖨️ Print Report
+            </button>
+          </div>
+          <div class="filter-bar">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="filterUpazila">Upazila</label>
+              <select id="filterUpazila">
+                <option value="">All Upazilas</option>
+              </select>
+            </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="filterUnion">Union</label>
+            <select id="filterUnion">
+              <option value="">All Unions</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="filterBlock">Block</label>
+            <select id="filterBlock">
+              <option value="">All Blocks</option>
+              <option value="1">Block 1</option>
+              <option value="2">Block 2</option>
+              <option value="3">Block 3</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="filterWard">Ward</label>
+            <input type="text" id="filterWard" placeholder="e.g. 1, 2, 3..." />
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="filterStartDate">From Date</label>
+            <input type="date" id="filterStartDate" />
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="filterEndDate">To Date</label>
+            <input type="date" id="filterEndDate" />
+          </div>
+          <button type="button" id="btnResetFilters" class="btn btn-secondary" style="height: 42px;">
+            Reset Filters
+          </button>
+        </div>
+      </div>
+
+        <!-- 3 Primary Required KPI Metrics -->
+        <div class="metrics-grid">
+          <!-- Metric 1: Number of Farmer received fertilizer -->
+          <div class="metric-card metric-farmers">
+            <span class="metric-label">Farmers Received Fertilizer</span>
+            <span id="metricFarmerCount" class="metric-value">0</span>
+            <span class="metric-desc">Total unique farmers with fertilizer purchases</span>
+          </div>
+
+          <!-- Metric 2: Quantity (kg) of fertilizer sold -->
+          <div class="metric-card metric-sales">
+            <span class="metric-label">Fertilizer Sold</span>
+            <span id="metricSoldKg" class="metric-value">0 <span style="font-size: 1.1rem; font-weight: 500;">kg</span></span>
+            <span class="metric-desc">Total fertilizer distributed (in kg)</span>
+          </div>
+
+          <!-- Metric 3: Stock status (kg) -->
+          <div class="metric-card metric-stock">
+            <span class="metric-label">Current Stock Status</span>
+            <span id="metricStockKg" class="metric-value">0 <span style="font-size: 1.1rem; font-weight: 500;">kg</span></span>
+            <span class="metric-desc">Available fertilizer across dealers</span>
+          </div>
+        </div>
+
+        <!-- Fertilizer Breakdown Table -->
+        <div class="data-table-card">
+          <div class="table-header">
+            <div class="table-title">🧪 Fertilizer Breakdown: Urea • TSP • MoP • DAP</div>
+            <button type="button" id="btnRefreshDashboard" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">
+              🔄 Refresh Data
+            </button>
+          </div>
+          <div class="responsive-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fertilizer Name</th>
+                  <th>Total Sold (kg)</th>
+                  <th>Opening Stock (kg)</th>
+                  <th>Closing Stock (kg)</th>
+                  <th>Net Balance Status (kg)</th>
+                </tr>
+              </thead>
+              <tbody id="fertilizerStatsBody">
+                <tr>
+                  <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                    Loading fertilizer data...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Summary Table (Union-wise, Block-wise, Ward-wise, Date-wise) -->
+        <div class="data-table-card" id="summaryReportCard">
+          <div class="table-header" style="flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div class="table-title">📈 Summary Report</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                Farmers received fertilizer, fertilizer sold & stock status breakdown
+              </div>
+            </div>
+            
+            <!-- Export Actions -->
+            <div class="export-actions" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+                <select id="summaryGroupBy" style="padding: 6px 10px; font-size: 0.82rem; height: 34px;">
+                  <option value="detailed">Group: Union + Block + Ward + Date</option>
+                  <option value="union">Group: Union-wise</option>
+                  <option value="block">Group: Block-wise</option>
+                  <option value="ward">Group: Ward-wise</option>
+                  <option value="date">Group: Date-wise</option>
+                </select>
+              </div>
+              <button type="button" id="btnExportExcel" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.82rem; height: 34px; background: #065f46; border-color: #059669; color: white;">
+                📊 Export Excel
+              </button>
+              <button type="button" id="btnExportPDF" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.82rem; height: 34px; background: #991b1b; border-color: #dc2626; color: white;">
+                📄 Export PDF
+              </button>
+            </div>
+          </div>
+
+          <div class="responsive-table">
+            <table id="summaryReportTable">
+              <thead>
+                <tr>
+                  <th id="thGrouping">Grouping</th>
+                  <th>Date</th>
+                  <th>Union</th>
+                  <th>Block</th>
+                  <th>Ward</th>
+                  <th style="text-align: right;">Farmers Received</th>
+                  <th style="text-align: right;">Fertilizer Sold (kg)</th>
+                  <th style="text-align: right;">Opening Stock (kg)</th>
+                  <th style="text-align: right;">Closing Stock (kg)</th>
+                  <th style="text-align: right;">Current Stock Balance (kg)</th>
+                </tr>
+              </thead>
+              <tbody id="summaryTableBody">
+                <tr>
+                  <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                    Loading summary data...
+                  </td>
+                </tr>
+              </tbody>
+              <tfoot id="summaryTableFoot" style="font-weight: 700; background: rgba(31, 41, 55, 0.9);">
+                <!-- Dynamic Totals row -->
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Transactions Table -->
+        <div class="data-table-card" id="salesRecordsCard">
+          <div class="table-header" style="flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div class="table-title">📋 Recent Sales Records</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                Transactions filtered by location and date
+              </div>
+            </div>
+            <!-- Export Actions for Sales -->
+            <div class="export-actions" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+              <button type="button" id="btnExportSalesExcel" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.82rem; height: 34px; background: #065f46; border-color: #059669; color: white;">
+                📊 Export Excel
+              </button>
+              <button type="button" id="btnExportSalesPDF" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.82rem; height: 34px; background: #991b1b; border-color: #dc2626; color: white;">
+                📄 Export PDF
+              </button>
+            </div>
+          </div>
+          <div class="responsive-table">
+            <table id="recentSalesTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Register Serial</th>
+                  <th>Farmer Name</th>
+                  <th>Farmer Location</th>
+                  <th>Fertilizer</th>
+                  <th>Quantity (kg)</th>
+                </tr>
+              </thead>
+              <tbody id="recentSalesTableBody">
+                <tr>
+                  <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                    No sales records found for this filter.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Registered Farmers Directory Records View -->
+        <div class="data-table-card" id="farmersDirectoryCard">
+          <div class="table-header" style="flex-direction: column; align-items: stretch; gap: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <div class="table-title">👨‍🌾 Registered Farmers Directory</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                  Filtered by selected Upazila / Union / Block / Ward
+                </div>
+              </div>
+              <!-- Export Actions for Farmers -->
+              <div class="export-actions">
+                <button type="button" id="btnExportFarmersExcel" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.82rem; height: 34px; background: #065f46; border-color: #059669; color: white;">
+                  📊 Export Excel
+                </button>
+                <button type="button" id="btnExportFarmersPDF" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.82rem; height: 34px; background: #991b1b; border-color: #dc2626; color: white;">
+                  📄 Export PDF
+                </button>
+              </div>
+            </div>
+
+            <!-- Search Section just below the title, left-aligned -->
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid rgba(36, 60, 100, 0.6);">
+              <input type="text" id="searchFarmerInput" placeholder="🔍 Search farmer by name, NID, mobile..." style="max-width: 320px; padding: 7px 14px; font-size: 0.85rem; height: 36px; background: #0f1c30; border: 1.5px solid #243c64; border-radius: 6px; color: white;" />
+              <span id="farmerBadgeCount" class="user-role-pill" style="background:#1e40af; white-space:nowrap; padding: 4px 10px; font-size: 0.78rem;">0 Farmers</span>
+            </div>
+          </div>
+          <div class="responsive-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Farmer Name</th>
+                  <th>Mobile</th>
+                  <th>NID</th>
+                  <th>Address (Village, Ward, Block, Union, Upazila)</th>
+                  <th>Land Info</th>
+                  <th>Crop Produced</th>
+                </tr>
+              </thead>
+              <tbody id="registeredFarmersTableBody">
+                <tr>
+                  <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                    No registered farmers match the current filter.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- VIEW: FARMER'S INFO                                      -->
+      <!-- ======================================================== -->
+      <section id="viewForm1" class="view-content hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">🌾 Farmer’s Info</h2>
+              <p class="card-desc">Register farmer personal identity, address, landholding, and crop production.</p>
+            </div>
+            <span class="nav-badge" style="background:#15803d; color:white; border-radius:6px; padding:4px 10px;">Farmer Info</span>
+          </div>
+
+          <form id="formFarmer">
+            <!-- 1. Farmer's Name -->
+            <div class="form-group">
+              <label for="f_name">1. Farmer’s Name <span class="req">*</span></label>
+              <input type="text" id="f_name" placeholder="Full name of farmer" required />
+            </div>
+
+            <!-- 2. Address -->
+            <div class="form-section">
+              <div class="section-legend">📍 2. Address</div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="f_village">• Village <span class="req">*</span></label>
+                  <input type="text" id="f_village" placeholder="Village name" required />
+                </div>
+                <div class="form-group">
+                  <label for="f_block">• Block <span class="req">*</span></label>
+                  <select id="f_block" required>
+                    <option value="">Select Block (1, 2, or 3)</option>
+                    <option value="1">Block 1</option>
+                    <option value="2">Block 2</option>
+                    <option value="3">Block 3</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="f_ward">• Ward <span class="req">*</span></label>
+                  <input type="text" id="f_ward" placeholder="Ward no. (e.g. Ward 1)" required />
+                </div>
+                <div class="form-group">
+                  <label for="f_upazila">• Upazila <span class="req">*</span></label>
+                  <select id="f_upazila" required>
+                    <option value="">Select Upazila</option>
+                    <option value="Ukhiya">Ukhiya</option>
+                    <option value="Cox's Bazar Sadar">Cox's Bazar Sadar</option>
+                    <option value="Teknaf">Teknaf</option>
+                    <option value="Ramu">Ramu</option>
+                    <option value="Chakaria">Chakaria</option>
+                    <option value="Moheshkhali">Moheshkhali</option>
+                    <option value="Kutubdia">Kutubdia</option>
+                    <option value="Pekua">Pekua</option>
+                    <option value="Eidgaon">Eidgaon</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="f_union">• Union <span class="req">*</span></label>
+                  <select id="f_union" required>
+                    <option value="">Select Union</option>
+                    <option value="Raja Palong">Raja Palong</option>
+                    <option value="Jalia Palong">Jalia Palong</option>
+                    <option value="Palong Khali">Palong Khali</option>
+                    <option value="Ratna Palong">Ratna Palong</option>
+                    <option value="Holdia Palong">Holdia Palong</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3 & 4. Identification (Unique) -->
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="f_nid">3. NID (National ID) <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                <input type="text" id="f_nid" placeholder="Unique NID number (10, 13, or 17 digits)" required />
+              </div>
+              <div class="form-group">
+                <label for="f_mobile">4. Mobile Number <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                <input type="tel" id="f_mobile" placeholder="e.g. 01712345678" required />
+              </div>
+            </div>
+
+            <!-- 5, 6, 7. Land Info -->
+            <div class="form-section">
+              <div class="section-legend">🗺️ 5. Land Info</div>
+
+              <div class="form-group">
+                <label for="f_land_area">6. Land Area (in Decimal) <span class="req">*</span></label>
+                <input type="number" id="f_land_area" step="0.01" min="0.1" placeholder="e.g. 50.5" required />
+              </div>
+
+              <!-- 7. Land Type -->
+              <div class="form-group">
+                <label>7. Land Type <span class="req">*</span></label>
+                <div class="radio-group">
+                  <label class="radio-label">
+                    <input type="radio" name="land_type" value="Khotian vukto" checked />
+                    Khotian vukto
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" name="land_type" value="Borga" />
+                    Borga
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" name="land_type" value="PF land" />
+                    PF land
+                  </label>
+                </div>
+              </div>
+
+              <!-- 11.1. Khotian vukto details -->
+              <div id="sectionKhotian" class="form-group" style="margin-top: 12px;">
+                <label for="f_khotian_no">11.1. Khotian no. <span class="req">*</span></label>
+                <input type="text" id="f_khotian_no" placeholder="Enter Khotian number" />
+              </div>
+
+              <!-- 11.2. Borga details -->
+              <div id="sectionBorga" class="form-grid hidden" style="margin-top: 12px; background: rgba(0,0,0,0.2); padding: 14px; border-radius: 8px;">
+                <div class="form-group">
+                  <label for="f_borga_name">• Land Owner Name <span class="req">*</span></label>
+                  <input type="text" id="f_borga_name" placeholder="Owner's full name" />
+                </div>
+                <div class="form-group">
+                  <label for="f_borga_mobile">• Mobile <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                  <input type="tel" id="f_borga_mobile" placeholder="Owner's mobile" />
+                </div>
+                <div class="form-group">
+                  <label for="f_borga_nid">• NID <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                  <input type="text" id="f_borga_nid" placeholder="Owner's NID" />
+                </div>
+                <div class="form-group">
+                  <label for="f_borga_type">• Type of Borga <span class="req">*</span></label>
+                  <select id="f_borga_type">
+                    <option value="Regular">Regular</option>
+                    <option value="irregular">Irregular</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 11.3. PF Land details -->
+              <div id="sectionPF" class="form-grid hidden" style="margin-top: 12px; background: rgba(0,0,0,0.2); padding: 14px; border-radius: 8px;">
+                <div class="form-group">
+                  <label for="f_pf_name">• Authority / Owner Name <span class="req">*</span></label>
+                  <input type="text" id="f_pf_name" placeholder="Name" />
+                </div>
+                <div class="form-group">
+                  <label for="f_pf_mobile">• Mobile <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                  <input type="tel" id="f_pf_mobile" placeholder="Mobile" />
+                </div>
+                <div class="form-group">
+                  <label for="f_pf_nid">• NID <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                  <input type="text" id="f_pf_nid" placeholder="NID" />
+                </div>
+              </div>
+            </div>
+
+            <!-- 8. Crop name produce in that land -->
+            <div class="form-section">
+              <div class="section-legend">🌾 8. Crop Name Produce in that Land</div>
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" name="crop_type" value="Paddy (Aus)" checked />
+                  Paddy (Aus)
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="crop_type" value="Paddy (Aman)" />
+                  Paddy (Aman)
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="crop_type" value="Paddy (Boro)" />
+                  Paddy (Boro)
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="crop_type" value="Vegetable" />
+                  Vegetable
+                </label>
+                <label class="radio-label">
+                  <input type="radio" name="crop_type" value="Others" />
+                  Others
+                </label>
+              </div>
+
+              <!-- If Other then write -->
+              <div id="sectionOtherCrop" class="form-group hidden" style="margin-top: 14px;">
+                <label for="f_other_crop">If Other, please specify crop name: <span class="req">*</span></label>
+                <input type="text" id="f_other_crop" placeholder="Specify crop details..." />
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+              💾 Save Farmer's Info
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- VIEW: DEALER’S SALES INFO                                -->
+      <!-- ======================================================== -->
+      <section id="viewForm2" class="view-content hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">📦 Dealer’s Sales Info</h2>
+              <p class="card-desc">Record fertilizer sale distribution to registered farmers.</p>
+            </div>
+            <span class="nav-badge" style="background:#2563eb; color:white; border-radius:6px; padding:4px 10px;">Sales Info</span>
+          </div>
+
+          <form id="formSales">
+            <div class="form-grid">
+              <!-- Select Farmer -->
+              <div class="form-group full-width">
+                <label for="s_farmer_id">Select Farmer <span class="req">*</span></label>
+                <select id="s_farmer_id" required>
+                  <option value="">-- Choose Registered Farmer (Search by NID/Name) --</option>
+                </select>
+              </div>
+
+              <!-- Date of Sale -->
+              <div class="form-group">
+                <label for="s_date">• Date of Sale <span class="req">*</span></label>
+                <input type="date" id="s_date" required />
+              </div>
+
+              <!-- Serial no. of register record -->
+              <div class="form-group">
+                <label for="s_serial">• Serial no. of Register Record <span class="req">*</span></label>
+                <input type="text" id="s_serial" placeholder="e.g. REG-BOOK-042" required />
+              </div>
+
+              <!-- Name of Fertilizer: Urea/TSP/MoP/DAP -->
+              <div class="form-group">
+                <label for="s_fertilizer">• Name of Fertilizer <span class="req">*</span></label>
+                <select id="s_fertilizer" required>
+                  <option value="Urea">Urea</option>
+                  <option value="TSP">TSP</option>
+                  <option value="MoP">MoP</option>
+                  <option value="DAP">DAP</option>
+                </select>
+              </div>
+
+              <!-- Quantity(kg) of Fertilizer received -->
+              <div class="form-group">
+                <label for="s_quantity">• Quantity (kg) of Fertilizer Received <span class="req">*</span></label>
+                <input type="number" id="s_quantity" step="0.5" min="0.5" placeholder="e.g. 50" required />
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+              💾 Record Fertilizer Sale
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- VIEW: DEALER’S REGISTER                                  -->
+      <!-- ======================================================== -->
+      <section id="viewForm3" class="view-content hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">📑 Dealer’s Register</h2>
+              <p class="card-desc">Daily fertilizer stock balance register (Opening and Closing status).</p>
+            </div>
+            <span class="nav-badge" style="background:#7c3aed; color:white; border-radius:6px; padding:4px 10px;">Register</span>
+          </div>
+
+          <form id="formRegister">
+            <div class="form-grid">
+              <!-- Register Date -->
+              <div class="form-group">
+                <label for="r_date">Date <span class="req">*</span></label>
+                <input type="date" id="r_date" required />
+              </div>
+
+              <!-- Status Type: Opening / Closing -->
+              <div class="form-group">
+                <label for="r_status_type">Status Type <span class="req">*</span></label>
+                <select id="r_status_type" required>
+                  <option value="Opening">1. Opening Status</option>
+                  <option value="Closing">2. Closing Status</option>
+                </select>
+              </div>
+
+              <!-- Name of Fertilizer: Urea/TSP/MoP/DAP -->
+              <div class="form-group">
+                <label for="r_fertilizer">• Name of Fertilizer <span class="req">*</span></label>
+                <select id="r_fertilizer" required>
+                  <option value="Urea">Urea</option>
+                  <option value="TSP">TSP</option>
+                  <option value="MoP">MoP</option>
+                  <option value="DAP">DAP</option>
+                </select>
+              </div>
+
+              <!-- Quantity(kg) of Fertilizer -->
+              <div class="form-group">
+                <label for="r_quantity">• Quantity (kg) of Fertilizer <span class="req">*</span></label>
+                <input type="number" id="r_quantity" step="0.1" min="0" placeholder="e.g. 500" required />
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+              💾 Save Register Entry
+            </button>
+          </form>
+
+          <!-- Current Dealer's Register History -->
+          <div style="margin-top: 32px;">
+            <h3 style="font-size: 1rem; margin-bottom: 12px; color:#d1d5db;">Recent Register Records</h3>
+            <div class="responsive-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Status Type</th>
+                    <th>Fertilizer</th>
+                    <th>Quantity (kg)</th>
+                  </tr>
+                </thead>
+                <tbody id="dealerRegisterTableBody">
+                  <tr>
+                    <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 18px;">
+                      No register entries yet.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- VIEW: FORM 4 - DEALER INFO (ADMIN / SUPERADMIN ONLY)     -->
+      <!-- ======================================================== -->
+      <section id="viewForm4" class="view-content hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">🏢 Form 4: Dealer Info (Admin Management)</h2>
+              <p class="card-desc">Admin manually registers dealers and creates their login password.</p>
+            </div>
+            <span class="nav-badge" style="background:#ea580c; color:white; border-radius:6px; padding:4px 10px;">Form 4</span>
+          </div>
+
+          <form id="formDealer">
+            <div class="form-grid">
+              <!-- 1. Dealer Name -->
+              <div class="form-group">
+                <label for="d_name">1. Dealer Name <span class="req">*</span></label>
+                <input type="text" id="d_name" placeholder="Full name of dealer / enterprise" required />
+              </div>
+
+              <!-- 2. Registration Number -->
+              <div class="form-group">
+                <label for="d_reg_no">2. Registration Number <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                <input type="text" id="d_reg_no" placeholder="e.g. DLR-2024-001" required />
+              </div>
+
+              <!-- Dealer Login Password -->
+              <div class="form-group">
+                <label for="d_password">Dealer Password <span class="req">*</span></label>
+                <input type="text" id="d_password" placeholder="Set password for dealer login" required />
+              </div>
+
+              <!-- 3. Address -->
+              <div class="form-group">
+                <label for="d_market">• Market Name <span class="req">*</span></label>
+                <input type="text" id="d_market" placeholder="Market / Bazar name" required />
+              </div>
+
+              <div class="form-group">
+                <label for="d_upazila">• Upazila <span class="req">*</span></label>
+                <select id="d_upazila" required>
+                  <option value="">Select Upazila</option>
+                  <option value="Ukhiya">Ukhiya</option>
+                  <option value="Cox's Bazar Sadar">Cox's Bazar Sadar</option>
+                  <option value="Teknaf">Teknaf</option>
+                  <option value="Ramu">Ramu</option>
+                  <option value="Chakaria">Chakaria</option>
+                  <option value="Moheshkhali">Moheshkhali</option>
+                  <option value="Kutubdia">Kutubdia</option>
+                  <option value="Pekua">Pekua</option>
+                  <option value="Eidgaon">Eidgaon</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="d_union">• Union <span class="req">*</span></label>
+                <select id="d_union" required>
+                  <option value="">Select Union</option>
+                  <option value="Raja Palong">Raja Palong</option>
+                  <option value="Jalia Palong">Jalia Palong</option>
+                  <option value="Palong Khali">Palong Khali</option>
+                  <option value="Ratna Palong">Ratna Palong</option>
+                  <option value="Holdia Palong">Holdia Palong</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+              💾 Register New Dealer (Form 4)
+            </button>
+          </form>
+
+          <!-- List of Registered Dealers Table -->
+          <div style="margin-top: 32px;">
+            <h3 style="font-size: 1rem; margin-bottom: 12px; color:#d1d5db;">All Registered Dealers</h3>
+            <div class="responsive-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Registration No.</th>
+                    <th>Dealer Name</th>
+                    <th>Login Password</th>
+                    <th>Market / Address</th>
+                    <th>Union & Upazila</th>
+                    <th>Registered On</th>
+                  </tr>
+                </thead>
+                <tbody id="allDealersTableBody">
+                  <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">
+                      Loading dealers...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Persistent Global Footnote -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <div>Developed by <strong>Kbd. Md. Nurul Alam Siddique</strong>, Value Chain Development Specialist, Shushilan, <a href="tel:01714315448" class="footer-phone">01714315448</a></div>
+        <div style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">© Copyright 2026. All rights reserved.</div>
+      </div>
+    </footer>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

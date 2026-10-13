@@ -27,10 +27,11 @@
       <!-- Navigation Tabs -->
       <nav id="navTabs" class="nav-links">
         <button type="button" class="nav-btn active" data-view="dashboard">📊 Dashboard</button>
-        <button type="button" class="nav-btn" data-view="form1" id="tabForm1">🌾 Farmer Info</button>
-        <button type="button" class="nav-btn" data-view="form2" id="tabForm2">📦 Sales Info</button>
-        <button type="button" class="nav-btn" data-view="form3" id="tabForm3">📑 Register</button>
-        <button type="button" class="nav-btn" data-view="form4" id="tabForm4">🏢 Dealer Admin</button>
+        <button type="button" class="nav-btn" data-view="form1" id="tabForm1">🌾 Add farmer</button>
+        <button type="button" class="nav-btn" data-view="form4" id="tabForm4">🏢 Add dealer</button>
+        <button type="button" class="nav-btn" data-view="form2" id="tabForm2">📦 Add sales</button>
+        <button type="button" class="nav-btn" data-view="form3" id="tabForm3">📑 Stock register</button>
+        <button type="button" class="nav-btn hidden" data-view="contributor" id="tabContributor">👥 Add contributor</button>
       </nav>
 
       <!-- User Identity & Logout -->
@@ -70,6 +71,10 @@
             Dealer Login
           </label>
           <label class="radio-label">
+            <input type="radio" name="loginRole" value="contributor" />
+            Contributor Login
+          </label>
+          <label class="radio-label">
             <input type="radio" name="loginRole" value="admin" />
             Admin / Superadmin
           </label>
@@ -85,6 +90,18 @@
             <div class="form-group">
               <label for="loginDealerPass">Password <span class="req">*</span></label>
               <input type="password" id="loginDealerPass" placeholder="Enter dealer password" autocomplete="current-password" />
+            </div>
+          </div>
+
+          <!-- Contributor Credential Inputs -->
+          <div id="contributorLoginFields" class="hidden">
+            <div class="form-group">
+              <label for="loginContributorUsername">Contributor Username <span class="req">*</span></label>
+              <input type="text" id="loginContributorUsername" placeholder="e.g. contrib1" autocomplete="username" />
+            </div>
+            <div class="form-group">
+              <label for="loginContributorPass">Password <span class="req">*</span></label>
+              <input type="password" id="loginContributorPass" placeholder="Enter contributor password" autocomplete="current-password" />
             </div>
           </div>
 
@@ -369,16 +386,15 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- VIEW: FARMER'S INFO                                      -->
+      <!-- VIEW: ADD FARMER                                         -->
       <!-- ======================================================== -->
       <section id="viewForm1" class="view-content hidden">
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 class="card-title">🌾 Farmer’s Info</h2>
+              <h2 class="card-title">🌾 Add farmer</h2>
               <p class="card-desc">Register farmer personal identity, address, landholding, and crop production.</p>
             </div>
-            <span class="nav-badge" style="background:#15803d; color:white; border-radius:6px; padding:4px 10px;">Farmer Info</span>
           </div>
 
           <form id="formFarmer">
@@ -565,16 +581,15 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- VIEW: DEALER’S SALES INFO                                -->
+      <!-- VIEW: ADD SALES                                          -->
       <!-- ======================================================== -->
       <section id="viewForm2" class="view-content hidden">
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 class="card-title">📦 Dealer’s Sales Info</h2>
+              <h2 class="card-title">📦 Add sales</h2>
               <p class="card-desc">Record fertilizer sale distribution to registered farmers.</p>
             </div>
-            <span class="nav-badge" style="background:#2563eb; color:white; border-radius:6px; padding:4px 10px;">Sales Info</span>
           </div>
 
           <form id="formSales">
@@ -625,16 +640,15 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- VIEW: DEALER’S REGISTER                                  -->
+      <!-- VIEW: STOCK REGISTER                                     -->
       <!-- ======================================================== -->
       <section id="viewForm3" class="view-content hidden">
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 class="card-title">📑 Dealer’s Register</h2>
+              <h2 class="card-title">📑 Stock register</h2>
               <p class="card-desc">Daily fertilizer stock balance register (Opening and Closing status).</p>
             </div>
-            <span class="nav-badge" style="background:#7c3aed; color:white; border-radius:6px; padding:4px 10px;">Register</span>
           </div>
 
           <form id="formRegister">
@@ -704,16 +718,15 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- VIEW: FORM 4 - DEALER INFO (ADMIN / SUPERADMIN ONLY)     -->
+      <!-- VIEW: ADD DEALER                                         -->
       <!-- ======================================================== -->
       <section id="viewForm4" class="view-content hidden">
         <div class="card">
           <div class="card-header">
             <div>
-              <h2 class="card-title">🏢 Form 4: Dealer Info (Admin Management)</h2>
-              <p class="card-desc">Admin manually registers dealers and creates their login password.</p>
+              <h2 class="card-title">🏢 Add dealer</h2>
+              <p class="card-desc">Admin and contributors register dealers and set their login credentials.</p>
             </div>
-            <span class="nav-badge" style="background:#ea580c; color:white; border-radius:6px; padding:4px 10px;">Form 4</span>
           </div>
 
           <form id="formDealer">
@@ -772,7 +785,7 @@
             </div>
 
             <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
-              💾 Register New Dealer (Form 4)
+              💾 Register New Dealer
             </button>
           </form>
 
@@ -795,6 +808,84 @@
                   <tr>
                     <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">
                       Loading dealers...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- VIEW: ADD CONTRIBUTOR (ADMIN ONLY)                       -->
+      <!-- ======================================================== -->
+      <section id="viewContributor" class="view-content hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">👥 Add contributor</h2>
+              <p class="card-desc">Only Admins can register contributors. Contributors get access to Add farmer, Add dealer, Add sales, and Stock register forms.</p>
+            </div>
+          </div>
+
+          <form id="formContributor">
+            <div class="form-grid">
+              <!-- Full Name -->
+              <div class="form-group">
+                <label for="c_name">Contributor Full Name <span class="req">*</span></label>
+                <input type="text" id="c_name" placeholder="Full name of contributor" required />
+              </div>
+
+              <!-- Username (Unique) -->
+              <div class="form-group">
+                <label for="c_username">Username <span class="req">*</span> <small style="color:#a7f3d0;">(Unique)</small></label>
+                <input type="text" id="c_username" placeholder="e.g. contributor_01" required />
+              </div>
+
+              <!-- Password -->
+              <div class="form-group">
+                <label for="c_password">Password <span class="req">*</span></label>
+                <input type="text" id="c_password" placeholder="Set login password" required />
+              </div>
+
+              <!-- Mobile -->
+              <div class="form-group">
+                <label for="c_mobile">Mobile Number</label>
+                <input type="tel" id="c_mobile" placeholder="e.g. 01712345678" />
+              </div>
+
+              <!-- Designation / Organization -->
+              <div class="form-group">
+                <label for="c_designation">Designation / Organization</label>
+                <input type="text" id="c_designation" placeholder="e.g. Field Officer, Shushilan" />
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
+              💾 Register Contributor
+            </button>
+          </form>
+
+          <!-- List of Registered Contributors Table -->
+          <div style="margin-top: 32px;">
+            <h3 style="font-size: 1rem; margin-bottom: 12px; color:#d1d5db;">All Registered Contributors</h3>
+            <div class="responsive-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Full Name</th>
+                    <th>Username</th>
+                    <th>Password</th>
+                    <th>Mobile</th>
+                    <th>Designation</th>
+                    <th>Registered On</th>
+                  </tr>
+                </thead>
+                <tbody id="allContributorsTableBody">
+                  <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">
+                      Loading contributors...
                     </td>
                   </tr>
                 </tbody>

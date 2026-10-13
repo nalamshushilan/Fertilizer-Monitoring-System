@@ -1,11 +1,12 @@
 import { supabase, isSupabaseConfigured, Session } from './supabase.js';
 
 // Global State
-let currentUser = Session.get(); // { role: 'dealer'|'admin'|'superadmin', dealer: {...} }
+let currentUser = Session.get(); // { role: 'dealer'|'admin'|'superadmin'|'contributor', dealer: {...}, contributor: {...} }
 let farmersCache = [];
 let dealersCache = [];
 let salesCache = [];
 let registersCache = [];
+let contributorsCache = [];
 
 // DOM References
 const navTabs = document.getElementById('navTabs');
@@ -13,6 +14,7 @@ const tabForm1 = document.getElementById('tabForm1');
 const tabForm2 = document.getElementById('tabForm2');
 const tabForm3 = document.getElementById('tabForm3');
 const tabForm4 = document.getElementById('tabForm4');
+const tabContributor = document.getElementById('tabContributor');
 
 const userProfileBar = document.getElementById('userProfileBar');
 const userRoleBadge = document.getElementById('userRoleBadge');
@@ -29,6 +31,7 @@ const views = {
   form2: document.getElementById('viewForm2'),
   form3: document.getElementById('viewForm3'),
   form4: document.getElementById('viewForm4'),
+  contributor: document.getElementById('viewContributor'),
   auth: document.getElementById('viewAuth')
 };
 
@@ -58,16 +61,44 @@ function showAlert(msg, type = 'error') {
 // ---------------------------------------------------------------------
 function switchView(viewName) {
   // Check permission gates
-  if ((viewName === 'form1' || viewName === 'form2' || viewName === 'form3') && !currentUser) {
-    showToast('Please sign in as a dealer to access this form.', false);
-    switchView('auth');
-    return;
+  if (viewName === 'contributor') {
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'superadmin')) {
+      showToast('Only Admin can access Add contributor.', false);
+      switchView('dashboard');
+      return;
+    }
   }
 
-  if (viewName === 'form4' && (!currentUser || currentUser.role === 'dealer')) {
-    showToast('Form 4 is restricted to Admins and Superadmins.', false);
-    switchView('auth');
-    return;
+  if (viewName === 'form2' || viewName === 'form3') {
+    // Admin access removed for sales and register
+    if (!currentUser) {
+      showToast('Please sign in to access this form.', false);
+      switchView('auth');
+      return;
+    }
+    if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
+      showToast('Admin does not have access to sales and register forms.', false);
+      switchView('dashboard');
+      return;
+    }
+  }
+
+  if (viewName === 'form4') {
+    // Admin and Contributor have access; Dealer does not
+    if (!currentUser || currentUser.role === 'dealer') {
+      showToast('Dealer does not have access to Add dealer form.', false);
+      switchView(currentUser ? 'dashboard' : 'auth');
+      return;
+    }
+  }
+
+  if (viewName === 'form1') {
+    // Dealer and Contributor have access; if unauthenticated, ask to login
+    if (!currentUser) {
+      showToast('Please sign in to access Add farmer.', false);
+      switchView('auth');
+      return;
+    }
   }
 
   // Update tab styles
@@ -91,6 +122,8 @@ function switchView(viewName) {
     loadDealerRegisterTable();
   } else if (viewName === 'form4') {
     loadDealersTable();
+  } else if (viewName === 'contributor') {
+    loadContributorsTable();
   }
 }
 
@@ -103,22 +136,36 @@ function updateAuthUI() {
     userRoleBadge.textContent = currentUser.role;
 
     if (currentUser.role === 'dealer') {
-      userNameDisplay.textContent = `${currentUser.dealer.dealer_name} (${currentUser.dealer.registration_number})`;
+      userNameDisplay.textContent = `${currentUser.dealer?.dealer_name || 'Dealer'} (${currentUser.dealer?.registration_number || ''})`;
       tabForm1.classList.remove('hidden');
       tabForm2.classList.remove('hidden');
       tabForm3.classList.remove('hidden');
-      tabForm4.classList.add('hidden'); // Dealers cannot see form 4
-    } else {
-      userNameDisplay.textContent = currentUser.name || 'System Admin';
+      tabForm4.classList.add('hidden');
+      if (tabContributor) tabContributor.classList.add('hidden');
+    } else if (currentUser.role === 'contributor') {
+      userNameDisplay.textContent = `${currentUser.name || currentUser.contributor?.full_name || 'Contributor'} (@${currentUser.contributor?.username || ''})`;
       tabForm1.classList.remove('hidden');
       tabForm2.classList.remove('hidden');
       tabForm3.classList.remove('hidden');
       tabForm4.classList.remove('hidden');
+      if (tabContributor) tabContributor.classList.add('hidden'); // Only Admin can add contributor
+    } else {
+      // Admin / Superadmin
+      userNameDisplay.textContent = currentUser.name || 'System Admin';
+      tabForm1.classList.add('hidden'); // Admin removed from farmer registration or focus only on admin tasks
+      tabForm2.classList.add('hidden'); // Admin removed from sales
+      tabForm3.classList.add('hidden'); // Admin removed from register
+      tabForm4.classList.remove('hidden'); // Admin can add dealer
+      if (tabContributor) tabContributor.classList.remove('hidden'); // Admin can add contributor
     }
   } else {
     userProfileBar.classList.add('hidden');
     btnLoginNav.classList.remove('hidden');
+    tabForm1.classList.add('hidden');
+    tabForm2.classList.add('hidden');
+    tabForm3.classList.add('hidden');
     tabForm4.classList.add('hidden');
+    if (tabContributor) tabContributor.classList.add('hidden');
   }
 }
 
@@ -127,20 +174,20 @@ function updateAuthUI() {
 // ---------------------------------------------------------------------
 const loginForm = document.getElementById('loginForm');
 const dealerLoginFields = document.getElementById('dealerLoginFields');
+const contributorLoginFields = document.getElementById('contributorLoginFields');
 const adminLoginFields = document.getElementById('adminLoginFields');
 const loginRegNo = document.getElementById('loginRegNo');
 const loginDealerPass = document.getElementById('loginDealerPass');
+const loginContributorUsername = document.getElementById('loginContributorUsername');
+const loginContributorPass = document.getElementById('loginContributorPass');
 const adminKeyInput = document.getElementById('adminKeyInput');
 
 document.querySelectorAll('input[name="loginRole"]').forEach(radio => {
   radio.addEventListener('change', (e) => {
-    if (e.target.value === 'dealer') {
-      dealerLoginFields.classList.remove('hidden');
-      adminLoginFields.classList.add('hidden');
-    } else {
-      dealerLoginFields.classList.add('hidden');
-      adminLoginFields.classList.remove('hidden');
-    }
+    const val = e.target.value;
+    dealerLoginFields.classList.toggle('hidden', val !== 'dealer');
+    if (contributorLoginFields) contributorLoginFields.classList.toggle('hidden', val !== 'contributor');
+    adminLoginFields.classList.toggle('hidden', val !== 'admin');
   });
 });
 
@@ -163,7 +210,7 @@ loginForm.addEventListener('submit', async (e) => {
       // Mock fallback if offline
       currentUser = {
         role: 'dealer',
-        dealer: { id: 'demo-1', registration_number: regNo, dealer_name: 'Demo Dealer Enterprise', upazila: 'Sadar', union_name: 'Sonapur' }
+        dealer: { id: 'demo-1', registration_number: regNo, dealer_name: 'Demo Dealer Enterprise', upazila: 'Ukhiya', union_name: 'Raja Palong' }
       };
       Session.set(currentUser);
       updateAuthUI();
@@ -193,6 +240,65 @@ loginForm.addEventListener('submit', async (e) => {
       switchView('form1');
     } catch (err) {
       showAlert('Login error: ' + err.message);
+    }
+  } else if (role === 'contributor') {
+    // Contributor login
+    const username = loginContributorUsername ? loginContributorUsername.value.trim() : '';
+    const pass = loginContributorPass ? loginContributorPass.value : '';
+
+    if (!username || !pass) {
+      showAlert('Please enter Contributor Username and Password.');
+      return;
+    }
+
+    if (!isSupabaseConfigured) {
+      // Find from cache or mock
+      const found = contributorsCache.find(c => c.username === username && c.password === pass);
+      if (found) {
+        currentUser = {
+          role: 'contributor',
+          contributor: found,
+          name: found.full_name
+        };
+      } else {
+        currentUser = {
+          role: 'contributor',
+          contributor: { id: 'c-demo', username, full_name: 'Contributor (' + username + ')' },
+          name: 'Contributor (' + username + ')'
+        };
+      }
+      Session.set(currentUser);
+      updateAuthUI();
+      showToast(`Welcome back, ${currentUser.name}!`);
+      switchView('form1');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('contributors')
+        .select('*')
+        .eq('username', username)
+        .eq('password', pass)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        showAlert('Invalid Contributor Username or Password. Please contact Admin.');
+        return;
+      }
+
+      currentUser = {
+        role: 'contributor',
+        contributor: data,
+        name: data.full_name
+      };
+      Session.set(currentUser);
+      updateAuthUI();
+      showToast(`Welcome back, ${data.full_name}!`);
+      switchView('form1');
+    } catch (err) {
+      showAlert('Contributor login error: ' + err.message);
     }
   } else {
     // Admin login
@@ -349,8 +455,8 @@ formSales.addEventListener('submit', async (e) => {
   e.preventDefault();
   showAlert(null);
 
-  if (!currentUser?.dealer && currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') {
-    showAlert('Please log in as a dealer to record sales.');
+  if (!currentUser || (currentUser.role !== 'dealer' && currentUser.role !== 'contributor')) {
+    showAlert('Only Dealers and Contributors can record sales.');
     return;
   }
 
@@ -489,6 +595,16 @@ async function loadDealersTable() {
   }
 }
 
+function formatDateDMY(dateInput) {
+  if (!dateInput) return 'N/A';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return String(dateInput);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}-${month}-${year}`;
+}
+
 function renderDealersTable(dealers) {
   if (dealers.length === 0) {
     allDealersTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:18px; color:var(--text-muted);">No dealers registered yet.</td></tr>`;
@@ -502,7 +618,7 @@ function renderDealersTable(dealers) {
       <td><code>${d.password}</code></td>
       <td>${d.market_name}</td>
       <td>${d.union_name}, ${d.upazila}</td>
-      <td style="color:var(--text-muted); font-size:0.8rem;">${new Date(d.created_at).toLocaleDateString()}</td>
+      <td style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">${formatDateDMY(d.created_at)}</td>
     </tr>
   `).join('');
 }
@@ -542,6 +658,113 @@ formDealer.addEventListener('submit', async (e) => {
     showAlert('Error saving dealer: ' + err.message);
   }
 });
+
+// ---------------------------------------------------------------------
+// FORM: ADD CONTRIBUTOR (ADMIN ONLY) CONTROLLER
+// ---------------------------------------------------------------------
+const formContributor = document.getElementById('formContributor');
+const allContributorsTableBody = document.getElementById('allContributorsTableBody');
+
+async function loadContributorsTable() {
+  if (!allContributorsTableBody) return;
+  allContributorsTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:18px;">Loading contributors...</td></tr>`;
+
+  if (!isSupabaseConfigured) {
+    renderContributorsTable(contributorsCache);
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.from('contributors').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+
+    contributorsCache = data || [];
+    renderContributorsTable(contributorsCache);
+  } catch (err) {
+    console.warn('Contributors fetch error:', err);
+    if (err.message && err.message.includes('schema cache')) {
+      allContributorsTableBody.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align:center; color:#f59e0b; padding:18px;">
+            ⚠️ <strong>Table 'contributors' not yet created in Supabase.</strong><br/>
+            <small style="color:var(--text-muted);">Please run the SQL script in your Supabase SQL Editor. Showing local entries for now.</small>
+          </td>
+        </tr>
+      `;
+    } else {
+      allContributorsTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#f87171;">Failed to load contributors.</td></tr>`;
+    }
+    // Also render any local entries if present
+    if (contributorsCache.length > 0) {
+      renderContributorsTable(contributorsCache);
+    }
+  }
+}
+
+function renderContributorsTable(contributors) {
+  if (!allContributorsTableBody) return;
+  if (!contributors || contributors.length === 0) {
+    allContributorsTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:18px; color:var(--text-muted);">No contributors registered yet.</td></tr>`;
+    return;
+  }
+
+  allContributorsTableBody.innerHTML = contributors.map(c => `
+    <tr>
+      <td><strong>${c.full_name}</strong></td>
+      <td><code>${c.username}</code></td>
+      <td><code>${c.password}</code></td>
+      <td>${c.mobile || '-'}</td>
+      <td>${c.designation || '-'}</td>
+      <td style="color:var(--text-muted); font-size:0.85rem; font-weight:600;">${formatDateDMY(c.created_at)}</td>
+    </tr>
+  `).join('');
+}
+
+if (formContributor) {
+  formContributor.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert(null);
+
+    const contribPayload = {
+      full_name: document.getElementById('c_name').value.trim(),
+      username: document.getElementById('c_username').value.trim(),
+      password: document.getElementById('c_password').value.trim(),
+      mobile: document.getElementById('c_mobile').value.trim() || null,
+      designation: document.getElementById('c_designation').value.trim() || null
+    };
+
+    if (!isSupabaseConfigured) {
+      contributorsCache.unshift({ id: 'c-' + Date.now(), created_at: new Date().toISOString(), ...contribPayload });
+      showToast(`Contributor ${contribPayload.full_name} registered!`);
+      formContributor.reset();
+      loadContributorsTable();
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.from('contributors').insert([contribPayload]).select().single();
+      if (error) {
+        if (error.message.includes('schema cache') || error.code === 'PGRST205') {
+          // Table doesn't exist yet on remote Supabase instance
+          contributorsCache.unshift({ id: 'c-' + Date.now(), created_at: new Date().toISOString(), ...contribPayload });
+          showAlert('Notice: Table "public.contributors" is not created in Supabase yet. Run the SQL script from supabase_setup.sql in your Supabase SQL Editor. Contributor registered in local session.', 'warning');
+          showToast(`Contributor ${contribPayload.full_name} saved locally!`);
+          formContributor.reset();
+          renderContributorsTable(contributorsCache);
+          return;
+        }
+        if (error.message.includes('username')) throw new Error('A contributor with this username already exists.');
+        throw error;
+      }
+
+      showToast(`Contributor ${data.full_name} registered successfully!`);
+      formContributor.reset();
+      loadContributorsTable();
+    } catch (err) {
+      showAlert('Error registering contributor: ' + err.message);
+    }
+  });
+}
 
 // ---------------------------------------------------------------------
 // DASHBOARD: WARD / BLOCK / UNION / UPAZILA FILTERS & METRICS

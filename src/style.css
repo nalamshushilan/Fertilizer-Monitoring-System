@@ -151,6 +151,7 @@ body {
 
 .role-superadmin { background: #7c3aed; color: white; }
 .role-admin { background: #2563eb; color: white; }
+.role-contributor { background: #d97706; color: white; }
 .role-dealer { background: #059669; color: white; }
 
 .btn-logout {
@@ -255,6 +256,26 @@ textarea {
   font-family: inherit;
   font-size: 0.92rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Ensure native date inputs render with clear theme styling */
+input[type="date"] {
+  color-scheme: dark;
+}
+
+/* Bright calendar icon indicator matching our Blue & Emerald theme */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 3px;
+  /* Green/Emerald glow filter matching theme */
+  filter: invert(68%) sepia(52%) saturate(478%) hue-rotate(110deg) brightness(98%) contrast(92%);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  filter: invert(80%) sepia(60%) saturate(700%) hue-rotate(100deg) brightness(110%) contrast(100%);
+  transform: scale(1.15);
 }
 
 input:focus,

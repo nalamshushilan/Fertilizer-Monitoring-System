@@ -86,13 +86,27 @@ CREATE TABLE public.dealer_registers (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. ENABLE ROW LEVEL SECURITY
+-- 6. CONTRIBUTORS TABLE (Add Contributor - Admin Managed)
+CREATE TABLE IF NOT EXISTS public.contributors (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  full_name TEXT NOT NULL,
+  username TEXT NOT NULL UNIQUE,
+  password TEXT NOT NULL,
+  mobile TEXT,
+  designation TEXT,
+  status TEXT DEFAULT 'active' NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 7. ENABLE ROW LEVEL SECURITY
 ALTER TABLE public.dealers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.farmers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dealer_sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.dealer_registers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contributors ENABLE ROW LEVEL SECURITY;
 
--- 7. PERMISSIVE POLICIES FOR SYSTEM ACCESS
+-- 8. PERMISSIVE POLICIES FOR SYSTEM ACCESS
 DROP POLICY IF EXISTS "Public all dealers" ON public.dealers;
 CREATE POLICY "Public all dealers" ON public.dealers FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
@@ -105,15 +119,19 @@ CREATE POLICY "Public all sales" ON public.dealer_sales FOR ALL TO anon, authent
 DROP POLICY IF EXISTS "Public all registers" ON public.dealer_registers;
 CREATE POLICY "Public all registers" ON public.dealer_registers FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- 8. PERFORMANCE INDEXES
+DROP POLICY IF EXISTS "Public all contributors" ON public.contributors;
+CREATE POLICY "Public all contributors" ON public.contributors FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- 9. PERFORMANCE INDEXES
 CREATE INDEX IF NOT EXISTS idx_dealers_reg ON public.dealers (registration_number);
+CREATE INDEX IF NOT EXISTS idx_contributors_username ON public.contributors (username);
 CREATE INDEX IF NOT EXISTS idx_farmers_nid ON public.farmers (nid);
 CREATE INDEX IF NOT EXISTS idx_farmers_mobile ON public.farmers (mobile);
 CREATE INDEX IF NOT EXISTS idx_farmers_geo ON public.farmers (upazila, union_name, block, ward);
 CREATE INDEX IF NOT EXISTS idx_sales_dealer ON public.dealer_sales (dealer_id);
 CREATE INDEX IF NOT EXISTS idx_registers_dealer ON public.dealer_registers (dealer_id);
 
--- 9. INITIAL SAMPLE DEALER (For instant local testing: Login with Reg: DLR-001 / Pass: dealer123)
+-- 10. INITIAL SAMPLE DEALER (For instant local testing: Login with Reg: DLR-001 / Pass: dealer123)
 INSERT INTO public.dealers (registration_number, password, dealer_name, market_name, union_name, upazila)
 VALUES ('DLR-001', 'dealer123', 'M/S Rahman Traders', 'Sadar Bazar', 'Sonapur', 'Sadar')
 ON CONFLICT (registration_number) DO NOTHING;

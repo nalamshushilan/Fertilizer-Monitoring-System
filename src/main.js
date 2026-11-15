@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured, Session } from './supabase.js';
 let currentUser = Session.get(); // { role: 'dealer'|'admin'|'superadmin'|'contributor', dealer: {...}, contributor: {...} }
 let farmersCache = [];
 let dealersCache = [];
+let transactionsCache = []; // Unified table: Transaction (replaces dealer_sales & dealer_registers)
 let salesCache = [];
 let registersCache = [];
 let contributorsCache = [];
@@ -11,7 +12,6 @@ let contributorsCache = [];
 // DOM References
 const navTabs = document.getElementById('navTabs');
 const tabForm1 = document.getElementById('tabForm1');
-const tabForm2 = document.getElementById('tabForm2');
 const tabForm3 = document.getElementById('tabForm3');
 const tabForm4 = document.getElementById('tabForm4');
 const tabContributor = document.getElementById('tabContributor');
@@ -24,11 +24,27 @@ const btnLoginNav = document.getElementById('btnLoginNav');
 const globalAlert = document.getElementById('globalAlert');
 const toast = document.getElementById('toast');
 
+// Dealer Dashboard Banner & Metrics Elements
+const dealerDashboardBadge = document.getElementById('dealerDashboardBadge');
+const dealerDashboardName = document.getElementById('dealerDashboardName');
+const dealerDashboardReg = document.getElementById('dealerDashboardReg');
+const fg_filterDealer = document.getElementById('fg_filterDealer');
+const filterDealer = document.getElementById('filterDealer');
+const metricFarmerLabel = document.getElementById('metricFarmerLabel');
+const metricSoldLabel = document.getElementById('metricSoldLabel');
+const metricStockLabel = document.getElementById('metricStockLabel');
+const metricFarmerDesc = document.getElementById('metricFarmerDesc');
+const metricSoldDesc = document.getElementById('metricSoldDesc');
+const metricStockDesc = document.getElementById('metricStockDesc');
+const fertilizerTableTitle = document.getElementById('fertilizerTableTitle');
+const summaryReportTitle = document.getElementById('summaryReportTitle');
+const recentSalesTitle = document.getElementById('recentSalesTitle');
+const farmersDirectoryTitle = document.getElementById('farmersDirectoryTitle');
+
 // Views
 const views = {
   dashboard: document.getElementById('viewDashboard'),
   form1: document.getElementById('viewForm1'),
-  form2: document.getElementById('viewForm2'),
   form3: document.getElementById('viewForm3'),
   form4: document.getElementById('viewForm4'),
   contributor: document.getElementById('viewContributor'),
@@ -69,15 +85,15 @@ function switchView(viewName) {
     }
   }
 
-  if (viewName === 'form2' || viewName === 'form3') {
-    // Admin access removed for sales and register
+  if (viewName === 'form3') {
+    // Admin access removed for stock register
     if (!currentUser) {
       showToast('Please sign in to access this form.', false);
       switchView('auth');
       return;
     }
     if (currentUser.role === 'admin' || currentUser.role === 'superadmin') {
-      showToast('Admin does not have access to sales and register forms.', false);
+      showToast('Admin does not have access to stock register form.', false);
       switchView('dashboard');
       return;
     }
@@ -116,9 +132,8 @@ function switchView(viewName) {
   // View specific activations
   if (viewName === 'dashboard') {
     loadDashboardData();
-  } else if (viewName === 'form2') {
-    populateFarmersDropdown();
   } else if (viewName === 'form3') {
+    populateFarmersDropdown();
     loadDealerRegisterTable();
   } else if (viewName === 'form4') {
     loadDealersTable();
@@ -138,34 +153,118 @@ function updateAuthUI() {
     if (currentUser.role === 'dealer') {
       userNameDisplay.textContent = `${currentUser.dealer?.dealer_name || 'Dealer'} (${currentUser.dealer?.registration_number || ''})`;
       tabForm1.classList.remove('hidden');
-      tabForm2.classList.remove('hidden');
       tabForm3.classList.remove('hidden');
       tabForm4.classList.add('hidden');
       if (tabContributor) tabContributor.classList.add('hidden');
+
+      // Dealer Private Dashboard Banner & Metric customization
+      if (dealerDashboardBadge) dealerDashboardBadge.classList.remove('hidden');
+      if (dealerDashboardName) dealerDashboardName.textContent = currentUser.dealer?.dealer_name || 'Dealer Store';
+      if (dealerDashboardReg) dealerDashboardReg.textContent = `(Reg: ${currentUser.dealer?.registration_number || ''}) • ${currentUser.dealer?.union_name || ''}, ${currentUser.dealer?.upazila || ''}`;
+
+      if (metricFarmerLabel) metricFarmerLabel.textContent = "Dealer's Farmers Served";
+      if (metricSoldLabel) metricSoldLabel.textContent = "Dealer's Fertilizer Sold";
+      if (metricStockLabel) metricStockLabel.textContent = "Dealer's Store Closing Stock";
+
+      if (metricFarmerDesc) metricFarmerDesc.textContent = 'Unique farmers served by your dealership';
+      if (metricSoldDesc) metricSoldDesc.textContent = 'Fertilizer sold by your dealership';
+      if (metricStockDesc) metricStockDesc.textContent = `Available stock in ${currentUser.dealer?.dealer_name || 'your dealership'}`;
+
+      if (fertilizerTableTitle) fertilizerTableTitle.textContent = `🧪 ${currentUser.dealer?.dealer_name || 'Dealership'} Stock Breakdown: Urea • TSP • MoP • DAP`;
+      if (summaryReportTitle) summaryReportTitle.textContent = `📈 ${currentUser.dealer?.dealer_name || 'Dealership'} Stock & Sales Summary Report`;
+      if (recentSalesTitle) recentSalesTitle.textContent = `📋 Recent Sales Records (${currentUser.dealer?.dealer_name || 'Your Dealership'})`;
+      if (farmersDirectoryTitle) farmersDirectoryTitle.textContent = `👨‍🌾 Farmers Registered by ${currentUser.dealer?.dealer_name || 'Your Dealership'}`;
+
+      // Hide dealer filter from logged-in dealer (only accessible for Admin and Contributor)
+      if (fg_filterDealer) fg_filterDealer.style.display = 'none';
+
+      // Allow dealer to view and filter all farmers across all unions
+      if (filterUpazila) filterUpazila.disabled = false;
+      if (filterUnion) filterUnion.disabled = false;
     } else if (currentUser.role === 'contributor') {
       userNameDisplay.textContent = `${currentUser.name || currentUser.contributor?.full_name || 'Contributor'} (@${currentUser.contributor?.username || ''})`;
       tabForm1.classList.remove('hidden');
-      tabForm2.classList.remove('hidden');
       tabForm3.classList.remove('hidden');
       tabForm4.classList.remove('hidden');
       if (tabContributor) tabContributor.classList.add('hidden'); // Only Admin can add contributor
+
+      if (dealerDashboardBadge) dealerDashboardBadge.classList.add('hidden');
+
+      // Dealer filter visible for Contributor
+      if (fg_filterDealer) fg_filterDealer.style.display = 'block';
+
+      if (metricFarmerLabel) metricFarmerLabel.textContent = "Farmers Received Fertilizer";
+      if (metricSoldLabel) metricSoldLabel.textContent = "Total Fertilizer Sold";
+      if (metricStockLabel) metricStockLabel.textContent = "Total Stock Status (All Dealers)";
+
+      if (metricFarmerDesc) metricFarmerDesc.textContent = 'Total unique farmers with fertilizer purchases';
+      if (metricSoldDesc) metricSoldDesc.textContent = 'Total fertilizer distributed (in kg)';
+      if (metricStockDesc) metricStockDesc.textContent = 'Available fertilizer across dealers';
+
+      if (fertilizerTableTitle) fertilizerTableTitle.textContent = '🧪 Total Fertilizer Breakdown Across All Dealers: Urea • TSP • MoP • DAP';
+      if (summaryReportTitle) summaryReportTitle.textContent = '📈 All Dealers Fertilizer Distribution & Stock Summary Report';
+      if (recentSalesTitle) recentSalesTitle.textContent = '📋 Recent Sales Records (All Dealers)';
+      if (farmersDirectoryTitle) farmersDirectoryTitle.textContent = '👨‍🌾 Registered Farmers Directory';
+
+      if (filterUpazila) filterUpazila.disabled = false;
+      if (filterUnion) filterUnion.disabled = false;
     } else {
       // Admin / Superadmin
       userNameDisplay.textContent = currentUser.name || 'System Admin';
       tabForm1.classList.add('hidden'); // Admin removed from farmer registration or focus only on admin tasks
-      tabForm2.classList.add('hidden'); // Admin removed from sales
       tabForm3.classList.add('hidden'); // Admin removed from register
       tabForm4.classList.remove('hidden'); // Admin can add dealer
       if (tabContributor) tabContributor.classList.remove('hidden'); // Admin can add contributor
+
+      if (dealerDashboardBadge) dealerDashboardBadge.classList.add('hidden');
+
+      // Dealer filter visible for Admin
+      if (fg_filterDealer) fg_filterDealer.style.display = 'block';
+
+      if (metricFarmerLabel) metricFarmerLabel.textContent = "Farmers Received Fertilizer";
+      if (metricSoldLabel) metricSoldLabel.textContent = "Total Fertilizer Sold";
+      if (metricStockLabel) metricStockLabel.textContent = "Total Stock Status (All Dealers)";
+
+      if (metricFarmerDesc) metricFarmerDesc.textContent = 'Total unique farmers with fertilizer purchases';
+      if (metricSoldDesc) metricSoldDesc.textContent = 'Total fertilizer distributed (in kg)';
+      if (metricStockDesc) metricStockDesc.textContent = 'Available fertilizer across dealers';
+
+      if (fertilizerTableTitle) fertilizerTableTitle.textContent = '🧪 Total Fertilizer Breakdown Across All Dealers: Urea • TSP • MoP • DAP';
+      if (summaryReportTitle) summaryReportTitle.textContent = '📈 All Dealers Fertilizer Distribution & Stock Summary Report';
+      if (recentSalesTitle) recentSalesTitle.textContent = '📋 Recent Sales Records (All Dealers)';
+      if (farmersDirectoryTitle) farmersDirectoryTitle.textContent = '👨‍🌾 Registered Farmers Directory';
+
+      if (filterUpazila) filterUpazila.disabled = false;
+      if (filterUnion) filterUnion.disabled = false;
     }
   } else {
     userProfileBar.classList.add('hidden');
     btnLoginNav.classList.remove('hidden');
     tabForm1.classList.add('hidden');
-    tabForm2.classList.add('hidden');
     tabForm3.classList.add('hidden');
     tabForm4.classList.add('hidden');
     if (tabContributor) tabContributor.classList.add('hidden');
+
+    if (dealerDashboardBadge) dealerDashboardBadge.classList.add('hidden');
+
+    // Dealer filter visible for public / guest view
+    if (fg_filterDealer) fg_filterDealer.style.display = 'block';
+
+    if (metricFarmerLabel) metricFarmerLabel.textContent = "Farmers Received Fertilizer";
+    if (metricSoldLabel) metricSoldLabel.textContent = "Total Fertilizer Sold";
+    if (metricStockLabel) metricStockLabel.textContent = "Total Stock Status (All Dealers)";
+
+    if (metricFarmerDesc) metricFarmerDesc.textContent = 'Total unique farmers with fertilizer purchases';
+    if (metricSoldDesc) metricSoldDesc.textContent = 'Total fertilizer distributed (in kg)';
+    if (metricStockDesc) metricStockDesc.textContent = 'Available fertilizer across dealers';
+
+    if (fertilizerTableTitle) fertilizerTableTitle.textContent = '🧪 Total Fertilizer Breakdown Across All Dealers: Urea • TSP • MoP • DAP';
+    if (summaryReportTitle) summaryReportTitle.textContent = '📈 All Dealers Fertilizer Distribution & Stock Summary Report';
+    if (recentSalesTitle) recentSalesTitle.textContent = '📋 Recent Sales Records (All Dealers)';
+    if (farmersDirectoryTitle) farmersDirectoryTitle.textContent = '👨‍🌾 Registered Farmers Directory';
+
+    if (filterUpazila) filterUpazila.disabled = false;
+    if (filterUnion) filterUnion.disabled = false;
   }
 }
 
@@ -215,7 +314,7 @@ loginForm.addEventListener('submit', async (e) => {
       Session.set(currentUser);
       updateAuthUI();
       showToast(`Welcome back, ${currentUser.dealer.dealer_name}!`);
-      switchView('form1');
+      switchView('dashboard');
       return;
     }
 
@@ -237,7 +336,7 @@ loginForm.addEventListener('submit', async (e) => {
       Session.set(currentUser);
       updateAuthUI();
       showToast(`Welcome back, ${data.dealer_name}!`);
-      switchView('form1');
+      switchView('dashboard');
     } catch (err) {
       showAlert('Login error: ' + err.message);
     }
@@ -344,13 +443,282 @@ navTabs.addEventListener('click', (e) => {
 });
 
 // ---------------------------------------------------------------------
-// FORM 1: FARMER'S INFO CONTROLLER
+// FORM 1: FARMER'S INFO & RAW FARMER LIST REFERENCE SEARCH
 // ---------------------------------------------------------------------
 const formFarmer = document.getElementById('formFarmer');
 const sectionKhotian = document.getElementById('sectionKhotian');
 const sectionBorga = document.getElementById('sectionBorga');
 const sectionPF = document.getElementById('sectionPF');
 const sectionOtherCrop = document.getElementById('sectionOtherCrop');
+
+const rawFarmerSearchInput = document.getElementById('rawFarmerSearchInput');
+const btnSearchRawFarmer = document.getElementById('btnSearchRawFarmer');
+const btnClearRawSearch = document.getElementById('btnClearRawSearch');
+const rawSearchStatus = document.getElementById('rawSearchStatus');
+
+// Sample Raw Farmers (for instant local demonstration & offline fallback)
+const SAMPLE_RAW_FARMERS = [
+  {
+    farmer_name: "Abdul Jalil",
+    village: "Rajapalong",
+    block: "1",
+    ward: "Ward 1",
+    union_name: "Raja Palong",
+    upazila: "Ukhiya",
+    nid: "1982123456789",
+    mobile: "01819123456"
+  },
+  {
+    farmer_name: "Nurul Islam",
+    village: "Sonarpara",
+    block: "2",
+    ward: "Ward 3",
+    union_name: "Jalia Palong",
+    upazila: "Ukhiya",
+    nid: "1975987654321",
+    mobile: "01712987654"
+  },
+  {
+    farmer_name: "Mohammad Hossain",
+    village: "Balukhali",
+    block: "3",
+    ward: "Ward 5",
+    union_name: "Palong Khali",
+    upazila: "Ukhiya",
+    nid: "1990456123789",
+    mobile: "01611223344"
+  },
+  {
+    farmer_name: "Kamal Uddin",
+    village: "Ratnapalong",
+    block: "1",
+    ward: "Ward 2",
+    union_name: "Ratna Palong",
+    upazila: "Ukhiya",
+    nid: "1988334455667",
+    mobile: "01918765432"
+  },
+  {
+    farmer_name: "Zahir Ahmed",
+    village: "Holdiapalong",
+    block: "2",
+    ward: "Ward 4",
+    union_name: "Holdia Palong",
+    upazila: "Ukhiya",
+    nid: "1984556677889",
+    mobile: "01822334455"
+  }
+];
+
+async function searchRawFarmer(queryVal, isAutoTrigger = false) {
+  const query = (queryVal || '').trim();
+  if (!query) {
+    if (!isAutoTrigger && rawSearchStatus) {
+      rawSearchStatus.style.display = 'block';
+      rawSearchStatus.style.background = 'rgba(239, 68, 68, 0.15)';
+      rawSearchStatus.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      rawSearchStatus.style.color = '#fca5a5';
+      rawSearchStatus.innerHTML = '⚠️ Please enter an NID or Mobile number to search.';
+    }
+    return;
+  }
+
+  if (rawSearchStatus) {
+    rawSearchStatus.style.display = 'block';
+    rawSearchStatus.style.background = 'rgba(59, 130, 246, 0.15)';
+    rawSearchStatus.style.border = '1px solid rgba(59, 130, 246, 0.4)';
+    rawSearchStatus.style.color = '#93c5fd';
+    rawSearchStatus.innerHTML = `🔍 Searching Raw Farmer List for <strong>"${query}"</strong>...`;
+  }
+
+  let matchedRecord = null;
+
+  // 1. Try querying remote Supabase table 'Raw-farmer-list' or 'raw_farmer_list'
+  if (isSupabaseConfigured) {
+    try {
+      let res = await supabase
+        .from('Raw-farmer-list')
+        .select('*')
+        .or(`nid.eq.${query},mobile.eq.${query}`)
+        .limit(1);
+
+      if (res.error) {
+        res = await supabase
+          .from('raw_farmer_list')
+          .select('*')
+          .or(`nid.eq.${query},mobile.eq.${query}`)
+          .limit(1);
+      }
+
+      if (!res.error && res.data && res.data.length > 0) {
+        matchedRecord = res.data[0];
+      }
+    } catch (e) {
+      console.warn('Raw farmer list remote search note:', e);
+    }
+  }
+
+  // 2. Fallback to sample reference raw farmers
+  if (!matchedRecord) {
+    matchedRecord = SAMPLE_RAW_FARMERS.find(rf => 
+      (rf.nid && rf.nid.trim() === query) || 
+      (rf.mobile && rf.mobile.trim() === query) ||
+      (rf.nid && rf.nid.replace(/\D/g, '') === query.replace(/\D/g, '')) ||
+      (rf.mobile && rf.mobile.replace(/\D/g, '') === query.replace(/\D/g, ''))
+    );
+  }
+
+  // 3. Process matched or not matched
+  if (matchedRecord) {
+    const nameField = document.getElementById('f_name');
+    const villageField = document.getElementById('f_village');
+    const blockField = document.getElementById('f_block');
+    const wardField = document.getElementById('f_ward');
+    const upazilaField = document.getElementById('f_upazila');
+    const unionField = document.getElementById('f_union');
+    const nidField = document.getElementById('f_nid');
+    const mobileField = document.getElementById('f_mobile');
+
+    if (nameField) nameField.value = matchedRecord.farmer_name || matchedRecord.name || '';
+    if (villageField) villageField.value = matchedRecord.village || matchedRecord.village_name || '';
+
+    if (blockField) {
+      let bVal = String(matchedRecord.block || '').replace(/\D/g, '');
+      if (['1', '2', '3'].includes(bVal)) {
+        blockField.value = bVal;
+      } else {
+        blockField.value = matchedRecord.block || '';
+      }
+    }
+
+    if (wardField) wardField.value = matchedRecord.ward || matchedRecord.ward_no || '';
+    if (upazilaField) upazilaField.value = 'Ukhiya';
+
+    if (unionField) {
+      const uName = (matchedRecord.union_name || matchedRecord.union || '').trim();
+      const matchedOpt = Array.from(unionField.options).find(opt => opt.value.toLowerCase() === uName.toLowerCase());
+      if (matchedOpt) {
+        unionField.value = matchedOpt.value;
+      } else if (uName) {
+        unionField.value = uName;
+      }
+    }
+
+    if (nidField) nidField.value = matchedRecord.nid || '';
+    if (mobileField) mobileField.value = matchedRecord.mobile || '';
+
+    if (rawSearchStatus) {
+      rawSearchStatus.style.display = 'block';
+      rawSearchStatus.style.background = 'rgba(16, 185, 129, 0.15)';
+      rawSearchStatus.style.border = '1px solid rgba(16, 185, 129, 0.5)';
+      rawSearchStatus.style.color = '#6ee7b7';
+      rawSearchStatus.innerHTML = `
+        <div style="font-weight: 600; display: flex; align-items: center; gap: 6px;">
+          <span>✅</span> Farmer record found in Raw Farmer List!
+        </div>
+        <div style="margin-top: 4px; color: #e5e7eb;">
+          <strong>${matchedRecord.farmer_name || matchedRecord.name}</strong> • NID: <code>${matchedRecord.nid || 'N/A'}</code> • Mobile: <code>${matchedRecord.mobile || 'N/A'}</code>
+        </div>
+        <div style="margin-top: 6px; font-size: 0.82rem; color: #a7f3d0;">
+          👉 Basic info (Parts 1 to 4) auto-filled. Please fill remaining fields (Parts 5 to 8) below.
+        </div>
+      `;
+    }
+
+    // Highlight animation on auto-filled inputs
+    [nameField, villageField, blockField, wardField, unionField, nidField, mobileField].filter(Boolean).forEach(el => {
+      el.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+      el.style.borderColor = '#10b981';
+      el.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.3)';
+      setTimeout(() => {
+        el.style.borderColor = '';
+        el.style.boxShadow = '';
+      }, 1800);
+    });
+
+    const landAreaField = document.getElementById('f_land_area');
+    if (landAreaField) {
+      setTimeout(() => landAreaField.focus(), 300);
+    }
+    showToast(`✓ Auto-filled basic info for ${matchedRecord.farmer_name || 'Farmer'}!`);
+  } else {
+    // Farmer not found: inform user and allow manual typing of 1 to 4
+    if (rawSearchStatus) {
+      rawSearchStatus.style.display = 'block';
+      rawSearchStatus.style.background = 'rgba(245, 158, 11, 0.15)';
+      rawSearchStatus.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+      rawSearchStatus.style.color = '#fde68a';
+      rawSearchStatus.innerHTML = `
+        <div style="font-weight: 600; display: flex; align-items: center; gap: 6px;">
+          <span>ℹ️</span> Farmer with NID / Mobile "<strong>${query}</strong>" not found in Raw Farmer List.
+        </div>
+        <div style="margin-top: 4px; color: #e5e7eb; font-size: 0.85rem;">
+          Please type farmer basic info (Parts 1 to 4) manually below and proceed with registration.
+        </div>
+      `;
+    }
+
+    const nidField = document.getElementById('f_nid');
+    const mobileField = document.getElementById('f_mobile');
+    const digitsOnly = query.replace(/\D/g, '');
+    if (digitsOnly.length === 11 && digitsOnly.startsWith('01') && mobileField && !mobileField.value) {
+      mobileField.value = digitsOnly;
+    } else if (digitsOnly.length >= 10 && nidField && !nidField.value) {
+      nidField.value = digitsOnly;
+    }
+
+    const nameField = document.getElementById('f_name');
+    if (nameField && !nameField.value) {
+      nameField.focus();
+    }
+  }
+}
+
+if (btnSearchRawFarmer) {
+  btnSearchRawFarmer.addEventListener('click', () => {
+    searchRawFarmer(rawFarmerSearchInput?.value || '');
+  });
+}
+
+if (rawFarmerSearchInput) {
+  rawFarmerSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchRawFarmer(rawFarmerSearchInput.value);
+    }
+  });
+}
+
+if (btnClearRawSearch) {
+  btnClearRawSearch.addEventListener('click', () => {
+    if (rawFarmerSearchInput) rawFarmerSearchInput.value = '';
+    if (rawSearchStatus) {
+      rawSearchStatus.style.display = 'none';
+      rawSearchStatus.innerHTML = '';
+    }
+  });
+}
+
+// Auto-search trigger when user enters NID or Mobile directly in Section 3 & 4
+let rawSearchDebounceTimer = null;
+function handleFieldAutoSearch(val) {
+  const cleanVal = (val || '').trim();
+  if (cleanVal.length === 10 || cleanVal.length === 13 || cleanVal.length === 17 || cleanVal.length === 11) {
+    clearTimeout(rawSearchDebounceTimer);
+    rawSearchDebounceTimer = setTimeout(() => {
+      const fName = document.getElementById('f_name');
+      if (!fName || !fName.value.trim()) {
+        if (rawFarmerSearchInput) rawFarmerSearchInput.value = cleanVal;
+        searchRawFarmer(cleanVal, true);
+      }
+    }, 500);
+  }
+}
+
+const f_nid_input = document.getElementById('f_nid');
+const f_mobile_input = document.getElementById('f_mobile');
+if (f_nid_input) f_nid_input.addEventListener('input', (e) => handleFieldAutoSearch(e.target.value));
+if (f_mobile_input) f_mobile_input.addEventListener('input', (e) => handleFieldAutoSearch(e.target.value));
 
 // Conditional Land Type radio toggle
 document.querySelectorAll('input[name="land_type"]').forEach(radio => {
@@ -401,9 +769,11 @@ formFarmer.addEventListener('submit', async (e) => {
   };
 
   if (!isSupabaseConfigured) {
-    farmersCache.push({ id: 'f-' + Date.now(), ...farmerPayload });
+    farmersCache.unshift({ id: 'f-' + Date.now(), ...farmerPayload });
     showToast(`Farmer ${farmerPayload.farmer_name} registered successfully (Demo Mode)!`);
     formFarmer.reset();
+    if (rawFarmerSearchInput) rawFarmerSearchInput.value = '';
+    if (rawSearchStatus) rawSearchStatus.style.display = 'none';
     return;
   }
 
@@ -415,160 +785,348 @@ formFarmer.addEventListener('submit', async (e) => {
       throw error;
     }
 
+    farmersCache.unshift(data);
     showToast(`Farmer ${data.farmer_name} registered successfully!`);
     formFarmer.reset();
+    if (rawFarmerSearchInput) rawFarmerSearchInput.value = '';
+    if (rawSearchStatus) rawSearchStatus.style.display = 'none';
   } catch (err) {
     showAlert('Error saving Farmer info: ' + err.message);
   }
 });
 
 // ---------------------------------------------------------------------
-// FORM 2: DEALER'S SALES INFO CONTROLLER
+// STOCK REGISTER (UNIFIED TRANSACTIONS) & FARMER SELECTION CONTROLLER
+// Formula: Closing Stock = Opening Stock + Received - Issued
 // ---------------------------------------------------------------------
-const formSales = document.getElementById('formSales');
-const s_farmer_id = document.getElementById('s_farmer_id');
+const formRegister = document.getElementById('formRegister');
+const dealerRegisterTableBody = document.getElementById('dealerRegisterTableBody');
+const r_transaction_type = document.getElementById('r_transaction_type');
+const r_reference_no = document.getElementById('r_reference_no');
+const r_received_qty = document.getElementById('r_received_qty');
+const r_issued_qty = document.getElementById('r_issued_qty');
+const r_remarks = document.getElementById('r_remarks');
+const r_farmer_id = document.getElementById('r_farmer_id');
+const fg_farmer_select = document.getElementById('fg_farmer_select');
+const fg_received_qty = document.getElementById('fg_received_qty');
+const fg_issued_qty = document.getElementById('fg_issued_qty');
 
 async function populateFarmersDropdown() {
-  s_farmer_id.innerHTML = '<option value="">-- Choose Registered Farmer (Search by NID/Name) --</option>';
+  if (!r_farmer_id) return;
+  r_farmer_id.innerHTML = '<option value="">-- Choose Registered Farmer (Search by NID/Name) --</option>';
 
   if (!isSupabaseConfigured) {
     farmersCache.forEach(f => {
-      s_farmer_id.innerHTML += `<option value="${f.id}">${f.farmer_name} (NID: ${f.nid} • Mobile: ${f.mobile})</option>`;
+      r_farmer_id.innerHTML += `<option value="${f.id}">${f.farmer_name} (NID: ${f.nid} • Mobile: ${f.mobile})</option>`;
     });
     return;
   }
 
   try {
-    const { data, error } = await supabase.from('farmers').select('id, farmer_name, nid, mobile, village, union_name');
+    // All dealers are allowed to view and select all registered farmers registered by all dealers
+    const { data, error } = await supabase
+      .from('farmers')
+      .select('*')
+      .order('farmer_name', { ascending: true });
     if (error) throw error;
 
-    farmersCache = data || [];
-    farmersCache.forEach(f => {
-      s_farmer_id.innerHTML += `<option value="${f.id}">${f.farmer_name} (NID: ${f.nid} • ${f.village}, ${f.union_name})</option>`;
+    const list = data || [];
+    farmersCache = list;
+    list.forEach(f => {
+      r_farmer_id.innerHTML += `<option value="${f.id}">${f.farmer_name} (NID: ${f.nid} • ${f.village}, ${f.union_name})</option>`;
     });
   } catch (err) {
     console.warn('Error loading farmers dropdown:', err);
   }
 }
 
-formSales.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  showAlert(null);
+// Dynamic field defaults when transaction type changes
+if (r_transaction_type) {
+  r_transaction_type.addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (val === 'OPENING') {
+      if (fg_farmer_select) fg_farmer_select.style.display = 'none';
+      if (fg_received_qty) fg_received_qty.style.display = 'block';
+      if (fg_issued_qty) fg_issued_qty.style.display = 'none';
+      if (r_reference_no) r_reference_no.value = 'Opening Balance';
+      if (r_received_qty) r_received_qty.value = 500;
+      if (r_issued_qty) r_issued_qty.value = 0;
+      if (r_remarks) r_remarks.value = 'Initial stock balance';
+    } else if (val === 'RECEIVED') {
+      if (fg_farmer_select) fg_farmer_select.style.display = 'none';
+      if (fg_received_qty) fg_received_qty.style.display = 'block';
+      if (fg_issued_qty) fg_issued_qty.style.display = 'none';
+      if (r_reference_no) r_reference_no.value = 'Challan-' + Date.now().toString().slice(-4);
+      if (r_received_qty) r_received_qty.value = '';
+      if (r_issued_qty) r_issued_qty.value = 0;
+      if (r_remarks) r_remarks.value = 'Stock received from buffer warehouse';
+    } else if (val === 'ISSUED') {
+      if (fg_farmer_select) {
+        fg_farmer_select.style.display = 'block';
+        populateFarmersDropdown();
+      }
+      if (fg_received_qty) fg_received_qty.style.display = 'none';
+      if (fg_issued_qty) fg_issued_qty.style.display = 'block';
+      if (r_reference_no) r_reference_no.value = 'Memo-' + Date.now().toString().slice(-4);
+      if (r_received_qty) r_received_qty.value = 0;
+      if (r_issued_qty) r_issued_qty.value = '';
+      if (r_remarks) r_remarks.value = 'Fertilizer issued / sold';
+    }
+  });
+}
 
-  if (!currentUser || (currentUser.role !== 'dealer' && currentUser.role !== 'contributor')) {
-    showAlert('Only Dealers and Contributors can record sales.');
-    return;
-  }
-
-  const salesPayload = {
-    dealer_id: currentUser?.dealer?.id || dealersCache[0]?.id || null,
-    farmer_id: s_farmer_id.value,
-    sale_date: document.getElementById('s_date').value,
-    register_serial_no: document.getElementById('s_serial').value.trim(),
-    fertilizer_name: document.getElementById('s_fertilizer').value,
-    quantity_kg: parseFloat(document.getElementById('s_quantity').value)
-  };
-
-  if (!isSupabaseConfigured) {
-    salesCache.push({ id: 's-' + Date.now(), ...salesPayload });
-    showToast(`Recorded sale of ${salesPayload.quantity_kg}kg ${salesPayload.fertilizer_name}!`);
-    formSales.reset();
-    return;
-  }
-
-  try {
-    const { error } = await supabase.from('dealer_sales').insert([salesPayload]);
-    if (error) throw error;
-
-    showToast(`Recorded sale of ${salesPayload.quantity_kg}kg ${salesPayload.fertilizer_name}!`);
-    formSales.reset();
-    document.getElementById('s_date').valueAsDate = new Date();
-  } catch (err) {
-    showAlert('Error saving sales info: ' + err.message);
-  }
-});
-
-// Set default sale date today
-document.getElementById('s_date').valueAsDate = new Date();
-document.getElementById('r_date').valueAsDate = new Date();
-
-// ---------------------------------------------------------------------
-// FORM 3: DEALER'S REGISTER CONTROLLER
-// ---------------------------------------------------------------------
-const formRegister = document.getElementById('formRegister');
-const dealerRegisterTableBody = document.getElementById('dealerRegisterTableBody');
+// Set default transaction date to today
+if (document.getElementById('r_date')) {
+  document.getElementById('r_date').valueAsDate = new Date();
+}
 
 async function loadDealerRegisterTable() {
-  dealerRegisterTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:18px;">Loading register...</td></tr>`;
+  if (!dealerRegisterTableBody) return;
+  dealerRegisterTableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:18px;">Loading stock register...</td></tr>`;
 
   if (!isSupabaseConfigured) {
-    renderRegisterTable(registersCache);
+    renderRegisterTable(transactionsCache);
     return;
   }
 
   try {
-    let query = supabase.from('dealer_registers').select('*').order('created_at', { ascending: false });
+    let txList = [];
+    let query = supabase.from('transactions').select('*').order('transaction_date', { ascending: true }).order('created_at', { ascending: true });
     if (currentUser?.dealer?.id) {
       query = query.eq('dealer_id', currentUser.dealer.id);
     }
-
     const { data, error } = await query;
-    if (error) throw error;
-    renderRegisterTable(data || []);
+    if (!error && data && data.length > 0) {
+      txList = data;
+    } else {
+      let queryAlt = supabase.from('Transaction').select('*').order('transaction_date', { ascending: true });
+      if (currentUser?.dealer?.id) queryAlt = queryAlt.eq('dealer_id', currentUser.dealer.id);
+      const resAlt = await queryAlt;
+      if (!resAlt.error && resAlt.data && resAlt.data.length > 0) {
+        txList = resAlt.data;
+      } else {
+        txList = transactionsCache;
+        if (currentUser?.dealer?.id) {
+          txList = txList.filter(t => t.dealer_id === currentUser.dealer.id);
+        }
+      }
+    }
+    renderRegisterTable(txList);
   } catch (err) {
-    dealerRegisterTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#f87171;">Failed to load register records.</td></tr>`;
+    renderRegisterTable(transactionsCache);
   }
 }
 
+// Render Stock Register with exact Formula: Closing Stock = Opening Stock + Received - Issued
 function renderRegisterTable(items) {
-  if (items.length === 0) {
-    dealerRegisterTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:18px; color:var(--text-muted);">No register entries yet.</td></tr>`;
+  if (!dealerRegisterTableBody) return;
+  if (!items || items.length === 0) {
+    dealerRegisterTableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:18px; color:var(--text-muted);">No stock register entries yet.</td></tr>`;
     return;
   }
 
-  dealerRegisterTableBody.innerHTML = items.map(item => `
-    <tr>
-      <td>${item.record_date}</td>
-      <td><span class="user-role-pill" style="background:${item.status_type === 'Opening' ? '#3b82f6' : '#8b5cf6'}">${item.status_type} Status</span></td>
-      <td><strong>${item.fertilizer_name}</strong></td>
-      <td><strong>${item.quantity_kg}</strong> kg</td>
-    </tr>
-  `).join('');
+  // Calculate Running Closing Stock per fertilizer:
+  // Closing Stock = Opening Stock + Received - Issued
+  const runningStock = { Urea: 0, TSP: 0, MoP: 0, DAP: 0 };
+
+  // Sort ascending by date for chronological stock calculation
+  const sorted = [...items].sort((a, b) => {
+    const da = a.transaction_date || a.sale_date || a.record_date || '';
+    const db = b.transaction_date || b.sale_date || b.record_date || '';
+    return da > db ? 1 : (da < db ? -1 : 0);
+  });
+
+  const calculatedRows = sorted.map(item => {
+    const fert = item.fertilizer_name || 'Urea';
+    const rawType = (item.transaction_type || item.status_type || (item.sale_date ? 'ISSUED' : 'OPENING')).toUpperCase();
+    const type = rawType.includes('OPEN') ? 'OPENING' : (rawType.includes('REC') ? 'RECEIVED' : 'ISSUED');
+    
+    let recQty = parseFloat(item.received_qty) || 0;
+    let issQty = parseFloat(item.issued_qty) || 0;
+    const qty = parseFloat(item.quantity_kg) || 0;
+
+    if (recQty === 0 && issQty === 0 && qty > 0) {
+      if (type === 'OPENING' || type === 'RECEIVED') recQty = qty;
+      else if (type === 'ISSUED') issQty = qty;
+    }
+
+    // Formula: Closing Stock = Opening Stock + Received - Issued
+    const prevStock = runningStock[fert] || 0;
+    let newClosing = 0;
+    if (type === 'OPENING') {
+      newClosing = recQty;
+      runningStock[fert] = newClosing;
+    } else {
+      newClosing = prevStock + recQty - issQty;
+      runningStock[fert] = newClosing;
+    }
+
+    return {
+      date: item.transaction_date || item.sale_date || item.record_date || 'N/A',
+      fertilizer: fert,
+      type: type,
+      referenceNo: item.reference_no || item.register_serial_no || (type === 'OPENING' ? 'Opening Balance' : '-'),
+      farmer: item.customer || (item.farmers ? item.farmers.farmer_name : (item.farmer_id ? 'Farmer' : 'Blank')),
+      receivedQty: recQty,
+      issuedQty: issQty,
+      closingStock: newClosing,
+      remarks: item.remarks || (type === 'OPENING' ? 'Initial stock balance' : '-')
+    };
+  });
+
+  // Display newest first
+  const displayList = [...calculatedRows].reverse();
+
+  dealerRegisterTableBody.innerHTML = displayList.map(r => {
+    const typeBadge = r.type === 'OPENING' 
+      ? '<span class="user-role-pill" style="background:#2563eb;">OPENING</span>'
+      : (r.type === 'RECEIVED' 
+          ? '<span class="user-role-pill" style="background:#059669;">RECEIVED</span>' 
+          : '<span class="user-role-pill" style="background:#d97706;">ISSUED</span>');
+
+    return `
+      <tr>
+        <td><code>${r.date}</code></td>
+        <td><strong>${r.fertilizer}</strong></td>
+        <td>${typeBadge}</td>
+        <td><code>${r.referenceNo}</code></td>
+        <td>${r.farmer}</td>
+        <td style="text-align: right; color:#34d399; font-weight:600;">${r.receivedQty > 0 ? `+${r.receivedQty.toLocaleString()} kg` : '-'}</td>
+        <td style="text-align: right; color:#f87171; font-weight:600;">${r.issuedQty > 0 ? `-${r.issuedQty.toLocaleString()} kg` : '-'}</td>
+        <td style="text-align: right; color:#60a5fa; font-weight:700; font-size:0.98rem;">${r.closingStock.toLocaleString()} kg</td>
+        <td style="font-size:0.82rem; color:var(--text-muted);">${r.remarks}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
-formRegister.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  showAlert(null);
+if (formRegister) {
+  formRegister.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert(null);
 
-  const regPayload = {
-    dealer_id: currentUser?.dealer?.id || dealersCache[0]?.id || null,
-    record_date: document.getElementById('r_date').value,
-    status_type: document.getElementById('r_status_type').value,
-    fertilizer_name: document.getElementById('r_fertilizer').value,
-    quantity_kg: parseFloat(document.getElementById('r_quantity').value)
-  };
+    if (!currentUser || (currentUser.role !== 'dealer' && currentUser.role !== 'contributor')) {
+      showAlert('Only Dealers and Contributors can record stock transactions.');
+      return;
+    }
 
-  if (!isSupabaseConfigured) {
-    registersCache.unshift({ id: 'r-' + Date.now(), ...regPayload });
-    showToast(`Saved ${regPayload.status_type} status of ${regPayload.quantity_kg}kg ${regPayload.fertilizer_name}!`);
-    formRegister.reset();
-    document.getElementById('r_date').valueAsDate = new Date();
-    loadDealerRegisterTable();
-    return;
-  }
+    const type = r_transaction_type ? r_transaction_type.value : 'OPENING';
+    const recQty = type === 'ISSUED' ? 0 : (parseFloat(r_received_qty?.value) || 0);
+    const issQty = type === 'ISSUED' ? (parseFloat(r_issued_qty?.value) || 0) : 0;
+    
+    if (type === 'RECEIVED' && recQty <= 0) {
+      showAlert('Please enter a valid Received Quantity (kg).');
+      return;
+    }
+    if (type === 'ISSUED' && issQty <= 0) {
+      showAlert('Please enter a valid Issued Quantity (kg).');
+      return;
+    }
+    if (type === 'OPENING' && recQty < 0) {
+      showAlert('Please enter a valid Opening Stock Quantity (kg).');
+      return;
+    }
 
-  try {
-    const { error } = await supabase.from('dealer_registers').insert([regPayload]);
-    if (error) throw error;
+    const refNo = r_reference_no?.value.trim() || (type === 'OPENING' ? 'Opening Balance' : (type === 'ISSUED' ? 'Memo-01' : 'Challan-01'));
+    
+    let farmerId = null;
+    let customerVal = 'Blank';
 
-    showToast(`Saved ${regPayload.status_type} status of ${regPayload.quantity_kg}kg ${regPayload.fertilizer_name}!`);
-    formRegister.reset();
-    document.getElementById('r_date').valueAsDate = new Date();
-    loadDealerRegisterTable();
-  } catch (err) {
-    showAlert('Error saving register: ' + err.message);
-  }
-});
+    if (type === 'ISSUED') {
+      farmerId = r_farmer_id ? (r_farmer_id.value || null) : null;
+      if (!farmerId) {
+        showAlert('Please select a registered farmer for fertilizer issue / sale.');
+        return;
+      }
+      const farmerOpt = r_farmer_id?.options[r_farmer_id.selectedIndex];
+      customerVal = farmerOpt ? farmerOpt.text.split('(')[0].trim() : 'Registered Farmer';
+    } else {
+      farmerId = null;
+      customerVal = 'Blank';
+    }
+
+    const remarksVal = r_remarks?.value.trim() || (type === 'OPENING' ? 'Initial stock balance' : (type === 'ISSUED' ? 'Stock issued' : 'Stock received'));
+    const fertVal = document.getElementById('r_fertilizer').value;
+    const dateVal = document.getElementById('r_date').value;
+
+    const txPayload = {
+      dealer_id: currentUser?.dealer?.id || dealersCache[0]?.id || null,
+      transaction_date: dateVal,
+      fertilizer_name: fertVal,
+      transaction_type: type,
+      reference_no: refNo,
+      customer_id: farmerId,
+      received_qty: recQty,
+      issued_qty: issQty,
+      remarks: remarksVal
+    };
+
+    if (!isSupabaseConfigured) {
+      txPayload.id = 'tx-' + Date.now();
+      txPayload.farmer_id = farmerId;
+      txPayload.register_serial_no = refNo;
+      txPayload.quantity_kg = type === 'ISSUED' ? issQty : (recQty > 0 ? recQty : issQty);
+      transactionsCache.unshift(txPayload);
+      if (type === 'ISSUED') {
+        salesCache.unshift(txPayload);
+        if (r_issued_qty) r_issued_qty.value = '';
+        if (r_farmer_id) r_farmer_id.value = '';
+        if (r_reference_no) r_reference_no.value = 'Memo-' + Date.now().toString().slice(-4);
+      } else if (type === 'RECEIVED') {
+        registersCache.unshift(txPayload);
+        if (r_received_qty) r_received_qty.value = '';
+        if (r_reference_no) r_reference_no.value = 'Challan-' + Date.now().toString().slice(-4);
+      } else {
+        registersCache.unshift(txPayload);
+      }
+      showToast(`Saved ${type} entry for ${fertVal}!`);
+      loadDealerRegisterTable();
+      computeAndRenderDashboard();
+      return;
+    }
+
+    try {
+      let insertPayload = { ...txPayload };
+      let res = await supabase.from('transactions').insert([insertPayload]).select().maybeSingle();
+      if (res.error) {
+        // If schema uses farmer_id instead of customer_id, adapt seamlessly
+        if (res.error.message && res.error.message.includes('customer_id')) {
+          delete insertPayload.customer_id;
+          insertPayload.farmer_id = farmerId;
+          res = await supabase.from('transactions').insert([insertPayload]).select().maybeSingle();
+        }
+        if (res.error) {
+          const resAlt = await supabase.from('Transaction').insert([insertPayload]).select().maybeSingle();
+          if (resAlt.error) throw res.error;
+        }
+      }
+
+      txPayload.id = res.data?.id || ('tx-' + Date.now());
+      txPayload.customer_id = farmerId;
+      txPayload.farmer_id = farmerId;
+      txPayload.register_serial_no = refNo;
+      txPayload.quantity_kg = type === 'ISSUED' ? issQty : (recQty > 0 ? recQty : issQty);
+      transactionsCache.unshift(txPayload);
+      if (type === 'ISSUED') {
+        salesCache.unshift(txPayload);
+        if (r_issued_qty) r_issued_qty.value = '';
+        if (r_farmer_id) r_farmer_id.value = '';
+        if (r_reference_no) r_reference_no.value = 'Memo-' + Date.now().toString().slice(-4);
+      } else if (type === 'RECEIVED') {
+        registersCache.unshift(txPayload);
+        if (r_received_qty) r_received_qty.value = '';
+        if (r_reference_no) r_reference_no.value = 'Challan-' + Date.now().toString().slice(-4);
+      } else {
+        registersCache.unshift(txPayload);
+      }
+      showToast(`Saved ${type} entry for ${fertVal}!`);
+      loadDealerRegisterTable();
+      loadDashboardData();
+    } catch (err) {
+      showAlert('Error saving register entry: ' + err.message);
+    }
+  });
+}
 
 // ---------------------------------------------------------------------
 // FORM 4: DEALER INFO (ADMIN REGISTRATION) CONTROLLER
@@ -816,18 +1374,55 @@ async function loadDashboardData() {
   }
 
   try {
-    // Parallel fetch of all related data
-    const [farmersRes, salesRes, registersRes, dealersRes] = await Promise.all([
-      supabase.from('farmers').select('*'),
-      supabase.from('dealer_sales').select('*, farmers(*)'),
-      supabase.from('dealer_registers').select('*'),
-      supabase.from('dealers').select('*')
+    const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+
+    // Parallel fetch of all related data:
+    // All dealers are allowed to view and select all registered farmers registered by all dealers
+    const [farmersRes, dealersRes] = await Promise.all([
+      supabase.from('farmers').select('*').order('farmer_name', { ascending: true }),
+      supabase.from('dealers').select('*').order('dealer_name', { ascending: true })
     ]);
 
     farmersCache = farmersRes.data || [];
-    salesCache = salesRes.data || [];
-    registersCache = registersRes.data || [];
     dealersCache = dealersRes.data || [];
+
+    // Fetch unified transactions (Dealer gets only their own transactions)
+    let txData = [];
+    let txQuery = supabase.from('transactions').select('*').order('created_at', { ascending: false });
+    if (isDealer) {
+      txQuery = txQuery.eq('dealer_id', currentUser.dealer.id);
+    }
+    const txRes = await txQuery;
+    if (!txRes.error && txRes.data) {
+      txData = txRes.data;
+    } else {
+      let txQueryAlt = supabase.from('Transaction').select('*').order('created_at', { ascending: false });
+      if (isDealer) {
+        txQueryAlt = txQueryAlt.eq('dealer_id', currentUser.dealer.id);
+      }
+      const txResAlt = await txQueryAlt;
+      if (!txResAlt.error && txResAlt.data) {
+        txData = txResAlt.data;
+      }
+    }
+
+    // If dealer has transactions with a farmer registered before dealer_id association, fetch those farmers
+    if (isDealer && txData.length > 0) {
+      const neededFarmerIds = txData
+        .map(t => t.customer_id || t.farmer_id)
+        .filter(Boolean)
+        .filter(id => !farmersCache.some(f => f.id === id));
+      if (neededFarmerIds.length > 0) {
+        const { data: missingFarmers } = await supabase.from('farmers').select('*').in('id', neededFarmerIds);
+        if (missingFarmers && missingFarmers.length > 0) {
+          farmersCache = [...farmersCache, ...missingFarmers];
+        }
+      }
+    }
+
+    transactionsCache = txData;
+    salesCache = transactionsCache.filter(t => (t.transaction_type || '').toUpperCase() === 'ISSUED');
+    registersCache = transactionsCache.filter(t => (t.transaction_type || '').toUpperCase() !== 'ISSUED');
 
     populateFilterOptions();
     computeAndRenderDashboard();
@@ -837,17 +1432,9 @@ async function loadDashboardData() {
   }
 }
 
-// Geographic Master Data
-const COX_BAZAR_UPAZILAS = [
-  "Ukhiya",
-  "Cox's Bazar Sadar",
-  "Teknaf",
-  "Ramu",
-  "Chakaria",
-  "Moheshkhali",
-  "Kutubdia",
-  "Pekua",
-  "Eidgaon"
+// Geographic Master Data (Strictly Ukhiya and its 5 Unions)
+const UKHIYA_UPAZILAS = [
+  "Ukhiya"
 ];
 
 const UKHIYA_UNIONS = [
@@ -859,40 +1446,73 @@ const UKHIYA_UNIONS = [
 ];
 
 function populateFilterOptions() {
-  const upazilas = new Set(COX_BAZAR_UPAZILAS);
-  const unions = new Set(UKHIYA_UNIONS);
+  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
 
-  // Also include any extra locations found in stored database records
-  farmersCache.forEach(f => {
-    if (f.upazila) upazilas.add(f.upazila);
-    if (f.union_name) unions.add(f.union_name);
-  });
-  dealersCache.forEach(d => {
-    if (d.upazila) upazilas.add(d.upazila);
-    if (d.union_name) unions.add(d.union_name);
-  });
+  // Populate Dealer-wise filter (Accessible for Admin and Contributor only)
+  if (filterDealer) {
+    if (isDealer) {
+      if (fg_filterDealer) fg_filterDealer.style.display = 'none';
+    } else {
+      if (fg_filterDealer) fg_filterDealer.style.display = 'block';
+      const curSelected = filterDealer.value;
+      filterDealer.innerHTML = '<option value="">All Dealers (Overall System)</option>' + 
+        dealersCache.map(d => `<option value="${d.id}" ${d.id === curSelected ? 'selected' : ''}>${d.dealer_name} (Reg: ${d.registration_number}) - ${d.union_name}</option>`).join('');
+    }
+  }
 
-  const selectedUpazila = filterUpazila.value;
-  const selectedUnion = filterUnion.value;
+  const selectedUpazila = filterUpazila ? (filterUpazila.value || '') : '';
+  const selectedUnion = filterUnion ? (filterUnion.value || '') : '';
 
-  filterUpazila.innerHTML = '<option value="">All Upazilas (Cox\'s Bazar)</option>' + 
-    Array.from(upazilas).map(u => `<option value="${u}" ${u === selectedUpazila ? 'selected' : ''}>${u}</option>`).join('');
+  if (filterUpazila) {
+    filterUpazila.innerHTML = '<option value="">All Upazilas (Ukhiya)</option>' + 
+      UKHIYA_UPAZILAS.map(u => `<option value="${u}" ${u === selectedUpazila ? 'selected' : ''}>${u}</option>`).join('');
+    filterUpazila.disabled = false;
+  }
 
-  filterUnion.innerHTML = '<option value="">All Unions (Ukhiya)</option>' + 
-    Array.from(unions).map(u => `<option value="${u}" ${u === selectedUnion ? 'selected' : ''}>${u}</option>`).join('');
+  if (filterUnion) {
+    filterUnion.innerHTML = '<option value="">All Unions (Ukhiya)</option>' + 
+      UKHIYA_UNIONS.map(u => `<option value="${u}" ${u === selectedUnion ? 'selected' : ''}>${u}</option>`).join('');
+    filterUnion.disabled = false;
+  }
 }
 
 function computeAndRenderDashboard() {
-  const upazilaVal = filterUpazila.value.toLowerCase().trim();
-  const unionVal = filterUnion.value.toLowerCase().trim();
+  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+  const selectedDealerId = !isDealer && filterDealer ? (filterDealer.value || '').trim() : '';
+  const currentDealerId = isDealer ? currentUser.dealer.id : (selectedDealerId || null);
+  const isFilteredToSpecificDealer = Boolean(currentDealerId);
+  const isMatchDealerId = (id1, id2) => Boolean(id1 && id2 && String(id1).toLowerCase().trim() === String(id2).toLowerCase().trim());
+
+  const selectedDealerObj = isFilteredToSpecificDealer
+    ? (isDealer ? currentUser.dealer : dealersCache.find(d => isMatchDealerId(d.id, currentDealerId)))
+    : null;
+
+  // 1. Transactions & Sales strictly scoped to dealer when logged in as dealer OR when admin/contributor chooses a specific dealer
+  const scopedTransactions = isFilteredToSpecificDealer
+    ? transactionsCache.filter(tx => isMatchDealerId(tx.dealer_id, currentDealerId))
+    : transactionsCache;
+
+  const scopedSales = isFilteredToSpecificDealer
+    ? salesCache.filter(s => isMatchDealerId(s.dealer_id, currentDealerId))
+    : salesCache;
+
+  // 2. Scope farmers:
+  // Each dealer is allowed to view all registered farmers registered by all dealers.
+  // When an Admin explicitly chooses a dealer in the filter, scope to that dealer; otherwise show all registered farmers.
+  const scopedFarmers = (!isDealer && selectedDealerId)
+    ? farmersCache.filter(f => isMatchDealerId(f.dealer_id, selectedDealerId))
+    : farmersCache;
+
+  const upazilaVal = (filterUpazila.value || '').toLowerCase().trim();
+  const unionVal = (filterUnion.value || '').toLowerCase().trim();
   const blockVal = filterBlock.value.trim();
   const wardVal = filterWard.value.toLowerCase().trim();
 
   const startDateVal = filterStartDate?.value || '';
   const endDateVal = filterEndDate?.value || '';
 
-  // 1. Filter Farmers by geographic selection
-  const matchingFarmers = farmersCache.filter(f => {
+  // Filter Farmers by geographic selection
+  const matchingFarmers = scopedFarmers.filter(f => {
     if (upazilaVal && (f.upazila || '').toLowerCase() !== upazilaVal) return false;
     if (unionVal && (f.union_name || '').toLowerCase() !== unionVal) return false;
     if (blockVal && String(f.block) !== blockVal) return false;
@@ -902,58 +1522,99 @@ function computeAndRenderDashboard() {
 
   const matchingFarmerIds = new Set(matchingFarmers.map(f => f.id));
 
-  // 2. Filter Sales to matching farmers and date range
-  const filteredSales = salesCache.filter(s => {
+  // Filter Sales to matching farmers and date range (scoped to dealer)
+  const filteredSales = scopedSales.filter(s => {
     // If geo filter is applied, farmer must match
-    if (upazilaVal || unionVal || blockVal || wardVal) {
-      if (!matchingFarmerIds.has(s.farmer_id)) return false;
+    if (blockVal || wardVal) {
+      const fId = s.customer_id || s.farmer_id;
+      if (!matchingFarmerIds.has(fId)) return false;
     }
     // Date filter
-    if (startDateVal && s.sale_date < startDateVal) return false;
-    if (endDateVal && s.sale_date > endDateVal) return false;
+    const sDate = s.transaction_date || s.sale_date || '';
+    if (startDateVal && sDate < startDateVal) return false;
+    if (endDateVal && sDate > endDateVal) return false;
     return true;
   });
 
-  // KPI 1: Number of Farmer received fertilizer
-  const farmersReceivedSet = new Set(filteredSales.map(s => s.farmer_id).filter(Boolean));
+  // Dynamic titles and labels based on active dealer context
+  if (isFilteredToSpecificDealer && selectedDealerObj) {
+    if (metricFarmerLabel) metricFarmerLabel.textContent = "Dealer's Farmers Served";
+    if (metricSoldLabel) metricSoldLabel.textContent = "Dealer's Fertilizer Sold";
+    if (metricStockLabel) metricStockLabel.textContent = "Dealer's Store Closing Stock";
+
+    if (metricFarmerDesc) metricFarmerDesc.textContent = `Unique farmers served by ${selectedDealerObj.dealer_name}`;
+    if (metricSoldDesc) metricSoldDesc.textContent = `Fertilizer sold by ${selectedDealerObj.dealer_name}`;
+    if (metricStockDesc) metricStockDesc.textContent = `Available stock in ${selectedDealerObj.dealer_name}`;
+
+    if (fertilizerTableTitle) fertilizerTableTitle.textContent = `🧪 ${selectedDealerObj.dealer_name} Stock Breakdown: Urea • TSP • MoP • DAP`;
+    if (summaryReportTitle) summaryReportTitle.textContent = `📈 ${selectedDealerObj.dealer_name} Stock & Sales Summary Report`;
+    if (recentSalesTitle) recentSalesTitle.textContent = `📋 Recent Sales Records (${selectedDealerObj.dealer_name})`;
+    if (farmersDirectoryTitle) {
+      farmersDirectoryTitle.textContent = isDealer 
+        ? "👨‍🌾 Registered Farmers Directory (All Registered Farmers)"
+        : `👨‍🌾 Farmers Registered by ${selectedDealerObj.dealer_name}`;
+    }
+  } else if (!isDealer) {
+    if (metricFarmerLabel) metricFarmerLabel.textContent = "Farmers Received Fertilizer";
+    if (metricSoldLabel) metricSoldLabel.textContent = "Total Fertilizer Sold";
+    if (metricStockLabel) metricStockLabel.textContent = "Total Stock Status (All Dealers)";
+
+    if (metricFarmerDesc) metricFarmerDesc.textContent = 'Total unique farmers with fertilizer purchases';
+    if (metricSoldDesc) metricSoldDesc.textContent = 'Total fertilizer distributed across dealers (in kg)';
+    if (metricStockDesc) metricStockDesc.textContent = 'Available fertilizer across all registered dealers';
+
+    if (fertilizerTableTitle) fertilizerTableTitle.textContent = '🧪 Total Fertilizer Breakdown Across All Dealers: Urea • TSP • MoP • DAP';
+    if (summaryReportTitle) summaryReportTitle.textContent = '📈 All Dealers Fertilizer Distribution & Stock Summary Report';
+    if (recentSalesTitle) recentSalesTitle.textContent = '📋 Recent Sales Records (All Dealers)';
+    if (farmersDirectoryTitle) farmersDirectoryTitle.textContent = '👨‍🌾 Registered Farmers Directory';
+  }
+
+  // KPI 1: Number of Farmer received fertilizer from this dealer
+  const farmersReceivedSet = new Set(filteredSales.map(s => s.customer_id || s.farmer_id).filter(Boolean));
   metricFarmerCount.textContent = farmersReceivedSet.size;
 
-  // KPI 2: Quantity (kg) of fertilizer sold
-  const totalSoldKg = filteredSales.reduce((sum, s) => sum + (parseFloat(s.quantity_kg) || 0), 0);
+  // KPI 2: Quantity (kg) of fertilizer sold / issued by this dealer
+  const totalSoldKg = filteredSales.reduce((sum, s) => sum + (parseFloat(s.issued_qty) || parseFloat(s.quantity_kg) || 0), 0);
   metricSoldKg.innerHTML = `${totalSoldKg.toLocaleString()} <span style="font-size: 1.1rem; font-weight: 500;">kg</span>`;
 
-  // 3. Compute Stock Status (Opening - Sold or Latest Register)
+  // 3. Compute Stock Status strictly for this dealer (Closing Stock = Opening Stock + Received - Issued)
   const fertilizerTypes = ['Urea', 'TSP', 'MoP', 'DAP'];
   const breakdown = {};
 
   fertilizerTypes.forEach(ft => {
-    breakdown[ft] = { sold: 0, opening: 0, closing: 0 };
+    breakdown[ft] = { opening: 0, received: 0, sold: 0, closing: 0 };
   });
 
-  // Calculate sold per fertilizer
-  filteredSales.forEach(s => {
-    if (breakdown[s.fertilizer_name]) {
-      breakdown[s.fertilizer_name].sold += parseFloat(s.quantity_kg) || 0;
-    }
-  });
+  // Calculate across scoped transactions
+  scopedTransactions.forEach(tx => {
+    const ft = tx.fertilizer_name;
+    if (breakdown[ft]) {
+      const type = (tx.transaction_type || tx.status_type || (tx.sale_date ? 'ISSUED' : 'OPENING')).toUpperCase();
+      let recQty = parseFloat(tx.received_qty) || 0;
+      let issQty = parseFloat(tx.issued_qty) || 0;
+      const qty = parseFloat(tx.quantity_kg) || 0;
 
-  // Calculate registered stock
-  registersCache.forEach(r => {
-    if (breakdown[r.fertilizer_name]) {
-      if (r.status_type === 'Opening') {
-        breakdown[r.fertilizer_name].opening += parseFloat(r.quantity_kg) || 0;
-      } else if (r.status_type === 'Closing') {
-        breakdown[r.fertilizer_name].closing += parseFloat(r.quantity_kg) || 0;
+      if (recQty === 0 && issQty === 0 && qty > 0) {
+        if (type.includes('OPEN') || type.includes('REC')) recQty = qty;
+        else if (type.includes('ISS') || type.includes('SALE')) issQty = qty;
+      }
+
+      if (type.includes('OPEN')) {
+        breakdown[ft].opening += recQty;
+      } else if (type.includes('REC')) {
+        breakdown[ft].received += recQty;
+      } else if (type.includes('ISS') || type.includes('SALE')) {
+        breakdown[ft].sold += issQty;
       }
     }
   });
 
-  // Total Stock KPI (Sum of Closing stocks, or Opening - Sold)
+  // Formula: Closing Stock = Opening Stock + Received - Issued
   let totalStockKg = 0;
   fertilizerTypes.forEach(ft => {
     const item = breakdown[ft];
-    const available = item.closing > 0 ? item.closing : Math.max(0, item.opening - item.sold);
-    totalStockKg += available;
+    item.closing = item.opening + item.received - item.sold;
+    totalStockKg += item.closing;
   });
 
   metricStockKg.innerHTML = `${totalStockKg.toLocaleString()} <span style="font-size: 1.1rem; font-weight: 500;">kg</span>`;
@@ -961,28 +1622,28 @@ function computeAndRenderDashboard() {
   // Render Fertilizer Breakdown Table
   fertilizerStatsBody.innerHTML = fertilizerTypes.map(ft => {
     const item = breakdown[ft];
-    const balance = item.closing > 0 ? item.closing : (item.opening - item.sold);
     return `
       <tr>
         <td><strong>${ft}</strong></td>
-        <td><span style="color:#10b981; font-weight:600;">${item.sold.toLocaleString()}</span> kg</td>
         <td>${item.opening.toLocaleString()} kg</td>
-        <td>${item.closing.toLocaleString()} kg</td>
-        <td><strong style="color:${balance >= 0 ? '#60a5fa' : '#f87171'};">${balance.toLocaleString()} kg</strong></td>
+        <td style="color:#34d399; font-weight:600;">+${item.received.toLocaleString()} kg</td>
+        <td style="color:#f87171; font-weight:600;">-${item.sold.toLocaleString()} kg</td>
+        <td><strong style="color:${item.closing >= 0 ? '#60a5fa' : '#f87171'}; font-size:1.02rem;">${item.closing.toLocaleString()} kg</strong></td>
       </tr>
     `;
   }).join('');
 
-  // Render Recent Sales Table & Cache for export
+  // Render Recent Sales Table & Cache for export (filtered to dealer)
   currentFilteredSalesData = filteredSales.map(s => {
-    const farmerObj = s.farmers || farmersCache.find(f => f.id === s.farmer_id);
+    const fId = s.customer_id || s.farmer_id;
+    const farmerObj = s.farmers || farmersCache.find(f => f.id === fId);
     return {
-      date: s.sale_date,
-      serial: s.register_serial_no,
-      farmerName: farmerObj?.farmer_name || 'Registered Farmer',
+      date: s.transaction_date || s.sale_date || 'N/A',
+      serial: s.reference_no || s.register_serial_no || 'N/A',
+      farmerName: s.customer || farmerObj?.farmer_name || 'Registered Farmer',
       farmerLocation: farmerObj ? `${farmerObj.village}, Ward ${farmerObj.ward}, Block ${farmerObj.block}, ${farmerObj.union_name}` : 'N/A',
       fertilizer: s.fertilizer_name,
-      quantityKg: parseFloat(s.quantity_kg) || 0
+      quantityKg: parseFloat(s.issued_qty) || parseFloat(s.quantity_kg) || 0
     };
   });
 
@@ -990,18 +1651,22 @@ function computeAndRenderDashboard() {
     recentSalesTableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted);">No sales records found matching the filter.</td></tr>`;
   } else {
     recentSalesTableBody.innerHTML = filteredSales.slice(0, 25).map(s => {
-      const farmerObj = s.farmers || farmersCache.find(f => f.id === s.farmer_id);
-      const farmerName = farmerObj?.farmer_name || 'Registered Farmer';
+      const fId = s.customer_id || s.farmer_id;
+      const farmerObj = s.farmers || farmersCache.find(f => f.id === fId);
+      const farmerName = s.customer || farmerObj?.farmer_name || 'Registered Farmer';
       const farmerLoc = farmerObj ? `${farmerObj.village}, Ward ${farmerObj.ward}` : 'N/A';
+      const saleDate = s.transaction_date || s.sale_date || 'N/A';
+      const refNo = s.reference_no || s.register_serial_no || 'N/A';
+      const qty = parseFloat(s.issued_qty) || parseFloat(s.quantity_kg) || 0;
 
       return `
         <tr>
-          <td>${s.sale_date}</td>
-          <td><code>${s.register_serial_no}</code></td>
+          <td>${saleDate}</td>
+          <td><code>${refNo}</code></td>
           <td><strong>${farmerName}</strong></td>
           <td style="color:var(--text-muted); font-size:0.82rem;">${farmerLoc}</td>
           <td><span class="user-role-pill" style="background:#047857;">${s.fertilizer_name}</span></td>
-          <td><strong>${s.quantity_kg}</strong> kg</td>
+          <td><strong>${qty.toLocaleString()}</strong> kg</td>
         </tr>
       `;
     }).join('');
@@ -1053,10 +1718,16 @@ function computeAndRenderDashboard() {
         cropDisplay += `<div style="font-size:0.78rem; color:var(--text-muted); margin-top:2px;">${f.crop_other_details}</div>`;
       }
 
+      const regDealer = dealersCache.find(d => isMatchDealerId(d.id, f.dealer_id));
+      const dealerTag = regDealer 
+        ? `<div style="font-size:0.75rem; color:#93c5fd; margin-top:2px;">Reg by: ${regDealer.dealer_name}</div>` 
+        : '';
+
       return `
         <tr>
           <td>
             <strong>${f.farmer_name}</strong>
+            ${dealerTag}
           </td>
           <td><a href="tel:${f.mobile}" style="color:#60a5fa; text-decoration:none;">${f.mobile}</a></td>
           <td><code>${f.nid}</code></td>
@@ -1091,26 +1762,47 @@ function renderSummaryReport(filteredSales, matchingFarmers) {
   const dealerMap = new Map();
   dealersCache.forEach(d => dealerMap.set(d.id, d));
 
-  // Calculate stock balance per dealer from registers and sales
-  // dealerStockMap: dealerId => { opening: kg, closing: kg, sold: kg, balance: kg }
+  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+  const selectedDealerId = !isDealer && filterDealer ? (filterDealer.value || '').trim() : '';
+  const currentDealerId = isDealer ? currentUser.dealer.id : (selectedDealerId || null);
+  const isFilteredToSpecificDealer = Boolean(currentDealerId);
+  const isMatchDealerId = (id1, id2) => Boolean(id1 && id2 && String(id1).toLowerCase().trim() === String(id2).toLowerCase().trim());
+
+  const selectedDealerObj = isFilteredToSpecificDealer
+    ? (isDealer ? currentUser.dealer : dealersCache.find(d => isMatchDealerId(d.id, currentDealerId)))
+    : null;
+
+  const scopedTransactions = isFilteredToSpecificDealer
+    ? transactionsCache.filter(tx => isMatchDealerId(tx.dealer_id, currentDealerId))
+    : transactionsCache;
+
+  // Calculate stock balance per dealer from transactions
+  // dealerStockMap: dealerId => { opening: kg, received: kg, sold: kg }
   const dealerStockMap = new Map();
-  dealersCache.forEach(d => {
-    dealerStockMap.set(d.id, { opening: 0, closing: 0, sold: 0 });
-  });
+  if (isFilteredToSpecificDealer) {
+    dealerStockMap.set(currentDealerId, { opening: 0, received: 0, sold: 0 });
+  } else {
+    dealersCache.forEach(d => {
+      dealerStockMap.set(d.id, { opening: 0, received: 0, sold: 0 });
+    });
+  }
 
-  registersCache.forEach(r => {
-    const entry = dealerStockMap.get(r.dealer_id);
+  scopedTransactions.forEach(tx => {
+    const entry = dealerStockMap.get(isFilteredToSpecificDealer ? currentDealerId : tx.dealer_id);
     if (entry) {
-      const kg = parseFloat(r.quantity_kg) || 0;
-      if (r.status_type === 'Opening') entry.opening += kg;
-      else if (r.status_type === 'Closing') entry.closing += kg;
-    }
-  });
+      const type = (tx.transaction_type || tx.status_type || (tx.sale_date ? 'ISSUED' : 'OPENING')).toUpperCase();
+      let recQty = parseFloat(tx.received_qty) || 0;
+      let issQty = parseFloat(tx.issued_qty) || 0;
+      const qty = parseFloat(tx.quantity_kg) || 0;
 
-  salesCache.forEach(s => {
-    const entry = dealerStockMap.get(s.dealer_id);
-    if (entry) {
-      entry.sold += parseFloat(s.quantity_kg) || 0;
+      if (recQty === 0 && issQty === 0 && qty > 0) {
+        if (type.includes('OPEN') || type.includes('REC')) recQty = qty;
+        else if (type.includes('ISS') || type.includes('SALE')) issQty = qty;
+      }
+
+      if (type.includes('OPEN')) entry.opening += recQty;
+      else if (type.includes('REC')) entry.received += recQty;
+      else if (type.includes('ISS') || type.includes('SALE')) entry.sold += issQty;
     }
   });
 
@@ -1119,11 +1811,11 @@ function renderSummaryReport(filteredSales, matchingFarmers) {
   const groups = new Map();
 
   filteredSales.forEach(s => {
-    const farmer = s.farmers || farmerMap.get(s.farmer_id) || {};
+    const farmer = s.farmers || farmerMap.get(s.farmer_id || s.customer_id) || {};
     const u = farmer.union_name || 'Unknown Union';
     const b = farmer.block ? `Block ${farmer.block}` : 'N/A';
     const w = farmer.ward ? `Ward ${farmer.ward}` : 'N/A';
-    const d = s.sale_date || 'N/A';
+    const d = s.transaction_date || s.sale_date || 'N/A';
 
     let groupKey = '';
     let groupLabel = '';
@@ -1160,28 +1852,39 @@ function renderSummaryReport(filteredSales, matchingFarmers) {
     }
 
     const row = groups.get(groupKey);
-    if (s.farmer_id) row.farmersSet.add(s.farmer_id);
-    row.soldKg += parseFloat(s.quantity_kg) || 0;
+    const fId = s.customer_id || s.farmer_id;
+    if (fId) row.farmersSet.add(fId);
+    row.soldKg += parseFloat(s.issued_qty) || parseFloat(s.quantity_kg) || 0;
     if (s.dealer_id) row.dealersSet.add(s.dealer_id);
   });
 
-  // Transform to structured array
+  // Transform to structured array with Formula: Closing Stock = Opening Stock + Received - Issued
   currentSummaryData = Array.from(groups.values()).map(g => {
-    // Stock calculation for this bucket
     let openingStock = 0;
-    let closingStock = 0;
+    let receivedStock = 0;
     let soldAcrossDealers = 0;
 
-    g.dealersSet.forEach(dId => {
-      const dStock = dealerStockMap.get(dId);
+    if (isFilteredToSpecificDealer) {
+      const dStock = dealerStockMap.get(currentDealerId);
       if (dStock) {
-        openingStock += dStock.opening;
-        closingStock += dStock.closing;
-        soldAcrossDealers += dStock.sold;
+        openingStock = dStock.opening;
+        receivedStock = dStock.received;
+        soldAcrossDealers = dStock.sold;
       }
-    });
+    } else {
+      g.dealersSet.forEach(dId => {
+        const dStock = dealerStockMap.get(dId);
+        if (dStock) {
+          openingStock += dStock.opening;
+          receivedStock += dStock.received;
+          soldAcrossDealers += dStock.sold;
+        }
+      });
+    }
 
-    const currentBalance = closingStock > 0 ? closingStock : Math.max(0, openingStock - soldAcrossDealers);
+    const finalSold = g.soldKg || soldAcrossDealers;
+    // Formula: Closing Stock = Opening Stock + Received - Issued
+    const closingStock = openingStock + receivedStock - finalSold;
 
     return {
       groupLabel: g.groupLabel,
@@ -1190,10 +1893,10 @@ function renderSummaryReport(filteredSales, matchingFarmers) {
       block: g.block,
       ward: g.ward,
       farmerCount: g.farmersSet.size,
-      soldKg: g.soldKg,
+      soldKg: finalSold,
       openingStock,
-      closingStock,
-      stockBalance: currentBalance
+      receivedStock,
+      closingStock
     };
   });
 
@@ -1213,19 +1916,7 @@ function renderSummaryReport(filteredSales, matchingFarmers) {
     return;
   }
 
-  let totalFarmers = 0;
-  let totalSold = 0;
-  let totalOpening = 0;
-  let totalClosing = 0;
-  let totalBalance = 0;
-
   summaryTableBody.innerHTML = currentSummaryData.map(row => {
-    totalFarmers += row.farmerCount;
-    totalSold += row.soldKg;
-    totalOpening += row.openingStock;
-    totalClosing += row.closingStock;
-    totalBalance += row.stockBalance;
-
     return `
       <tr>
         <td><strong>${row.groupLabel}</strong></td>
@@ -1234,23 +1925,49 @@ function renderSummaryReport(filteredSales, matchingFarmers) {
         <td>${row.block}</td>
         <td>${row.ward}</td>
         <td style="text-align: right;"><span class="user-role-pill" style="background:#2563eb;">${row.farmerCount}</span></td>
-        <td style="text-align: right; color:#10b981; font-weight:700;">${row.soldKg.toLocaleString()} kg</td>
         <td style="text-align: right;">${row.openingStock.toLocaleString()} kg</td>
-        <td style="text-align: right;">${row.closingStock.toLocaleString()} kg</td>
-        <td style="text-align: right; font-weight:700; color:#60a5fa;">${row.stockBalance.toLocaleString()} kg</td>
+        <td style="text-align: right; color:#34d399; font-weight:600;">+${row.receivedStock.toLocaleString()} kg</td>
+        <td style="text-align: right; color:#f87171; font-weight:600;">-${row.soldKg.toLocaleString()} kg</td>
+        <td style="text-align: right; font-weight:700; color:#60a5fa;">${row.closingStock.toLocaleString()} kg</td>
       </tr>
     `;
   }).join('');
 
-  // Table Footer Totals
+  // Table Footer Totals: calculate exact store totals rather than summing repeated rows
+  let totalOpening = 0;
+  let totalReceived = 0;
+  let totalSold = 0;
+  let totalClosing = 0;
+
+  if (isFilteredToSpecificDealer) {
+    const dStock = dealerStockMap.get(currentDealerId) || { opening: 0, received: 0, sold: 0 };
+    totalOpening = dStock.opening;
+    totalReceived = dStock.received;
+    totalSold = filteredSales.reduce((sum, s) => sum + (parseFloat(s.issued_qty) || parseFloat(s.quantity_kg) || 0), 0);
+    totalClosing = totalOpening + totalReceived - totalSold;
+  } else {
+    dealerStockMap.forEach(dStock => {
+      totalOpening += dStock.opening;
+      totalReceived += dStock.received;
+    });
+    totalSold = filteredSales.reduce((sum, s) => sum + (parseFloat(s.issued_qty) || parseFloat(s.quantity_kg) || 0), 0);
+    totalClosing = totalOpening + totalReceived - totalSold;
+  }
+
+  const uniqueFarmersCount = new Set(filteredSales.map(s => s.customer_id || s.farmer_id).filter(Boolean)).size;
+
+  const footerTitle = isFilteredToSpecificDealer 
+    ? `<strong>${(selectedDealerObj?.dealer_name || 'DEALERSHIP').toUpperCase()} STORE TOTALS</strong>`
+    : `<strong>ALL DEALERS SUMMARY TOTALS</strong>`;
+
   summaryTableFoot.innerHTML = `
     <tr>
-      <td colspan="5" style="padding: 12px 14px;"><strong>OVERALL SUMMARY TOTALS</strong></td>
-      <td style="text-align: right;"><span class="user-role-pill" style="background:#1d4ed8;">${totalFarmers}</span></td>
-      <td style="text-align: right; color:#10b981; font-size:1.05rem;">${totalSold.toLocaleString()} kg</td>
+      <td colspan="5" style="padding: 12px 14px;">${footerTitle}</td>
+      <td style="text-align: right;"><span class="user-role-pill" style="background:#1d4ed8;">${uniqueFarmersCount}</span></td>
       <td style="text-align: right;">${totalOpening.toLocaleString()} kg</td>
-      <td style="text-align: right;">${totalClosing.toLocaleString()} kg</td>
-      <td style="text-align: right; color:#60a5fa; font-size:1.05rem;">${totalBalance.toLocaleString()} kg</td>
+      <td style="text-align: right; color:#34d399; font-size:1.05rem;">+${totalReceived.toLocaleString()} kg</td>
+      <td style="text-align: right; color:#f87171; font-size:1.05rem;">-${totalSold.toLocaleString()} kg</td>
+      <td style="text-align: right; color:#60a5fa; font-size:1.05rem; font-weight:800;">${totalClosing.toLocaleString()} kg</td>
     </tr>
   `;
 }
@@ -1279,10 +1996,10 @@ function exportToExcel() {
       'Block': r.block,
       'Ward': r.ward,
       'Farmers Received': r.farmerCount,
-      'Fertilizer Sold (kg)': r.soldKg,
       'Opening Stock (kg)': r.openingStock,
-      'Closing Stock (kg)': r.closingStock,
-      'Stock Balance (kg)': r.stockBalance
+      'Received Stock (kg)': r.receivedStock,
+      'Fertilizer Sold / Issued (kg)': r.soldKg,
+      'Closing Stock (kg)': r.closingStock
     }));
 
     const worksheet = XLSXLib.utils.json_to_sheet(exportRows);
@@ -1324,7 +2041,7 @@ function exportToPDF() {
     doc.text(filterInfo, 14, 22);
 
     const headers = [
-      ['SL', 'Group', 'Date', 'Union', 'Block', 'Ward', 'Farmers', 'Sold (kg)', 'Opening (kg)', 'Closing (kg)', 'Balance (kg)']
+      ['SL', 'Group', 'Date', 'Union', 'Block', 'Ward', 'Farmers', 'Opening (kg)', 'Received (kg)', 'Sold/Issued (kg)', 'Closing Stock (kg)']
     ];
 
     const body = currentSummaryData.map((r, i) => [
@@ -1335,10 +2052,10 @@ function exportToPDF() {
       r.block,
       r.ward,
       r.farmerCount,
-      r.soldKg.toLocaleString(),
       r.openingStock.toLocaleString(),
-      r.closingStock.toLocaleString(),
-      r.stockBalance.toLocaleString()
+      r.receivedStock.toLocaleString(),
+      r.soldKg.toLocaleString(),
+      r.closingStock.toLocaleString()
     ]);
 
     doc.autoTable({
@@ -1555,7 +2272,7 @@ if (btnExportFarmersExcel) btnExportFarmersExcel.addEventListener('click', expor
 if (btnExportFarmersPDF) btnExportFarmersPDF.addEventListener('click', exportFarmersToPDF);
 
 // Filter listeners
-[filterUpazila, filterUnion, filterBlock].forEach(el => el.addEventListener('change', computeAndRenderDashboard));
+[filterDealer, filterUpazila, filterUnion, filterBlock].filter(Boolean).forEach(el => el.addEventListener('change', computeAndRenderDashboard));
 filterWard.addEventListener('input', computeAndRenderDashboard);
 if (filterStartDate) filterStartDate.addEventListener('change', computeAndRenderDashboard);
 if (filterEndDate) filterEndDate.addEventListener('change', computeAndRenderDashboard);
@@ -1564,8 +2281,15 @@ if (searchFarmerInput) {
 }
 
 btnResetFilters.addEventListener('click', () => {
-  filterUpazila.value = '';
-  filterUnion.value = '';
+  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+  if (isDealer) {
+    filterUpazila.value = currentUser.dealer.upazila || '';
+    filterUnion.value = currentUser.dealer.union_name || '';
+  } else {
+    filterUpazila.value = '';
+    filterUnion.value = '';
+    if (filterDealer) filterDealer.value = '';
+  }
   filterBlock.value = '';
   filterWard.value = '';
   if (filterStartDate) filterStartDate.value = '';

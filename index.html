@@ -29,7 +29,6 @@
         <button type="button" class="nav-btn active" data-view="dashboard">📊 Dashboard</button>
         <button type="button" class="nav-btn" data-view="form1" id="tabForm1">🌾 Add farmer</button>
         <button type="button" class="nav-btn" data-view="form4" id="tabForm4">🏢 Add dealer</button>
-        <button type="button" class="nav-btn" data-view="form2" id="tabForm2">📦 Add sales</button>
         <button type="button" class="nav-btn" data-view="form3" id="tabForm3">📑 Stock register</button>
         <button type="button" class="nav-btn hidden" data-view="contributor" id="tabContributor">👥 Add contributor</button>
       </nav>
@@ -127,6 +126,18 @@
       <!-- VIEW: DASHBOARD (Ward / Block / Union / Upazila Filter)   -->
       <!-- ======================================================== -->
       <section id="viewDashboard" class="view-content">
+        <!-- Dealer Exclusive Notice Banner -->
+        <div id="dealerDashboardBadge" class="hidden" style="margin-bottom: 16px; padding: 12px 18px; background: rgba(30, 58, 138, 0.45); border: 1.5px solid #2563eb; border-radius: 8px; font-size: 0.92rem; color: #bfdbfe; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:1.4rem;">🏪</span>
+            <div>
+              <div style="font-weight: 700; color: white;"><span id="dealerDashboardName">Dealer Store</span> <span id="dealerDashboardReg" style="color:#93c5fd; font-weight: normal; font-size: 0.85rem;"></span></div>
+              <div style="font-size:0.8rem; color:#93c5fd;">Private Dealership Dashboard: Displaying your own stock, sales, and registered farmers only</div>
+            </div>
+          </div>
+          <span class="user-role-pill" style="background:#059669; font-size:0.8rem;">Private Dealer Mode</span>
+        </div>
+
         <!-- Filter Bar -->
         <div class="filter-card">
           <div class="filter-header">
@@ -139,16 +150,29 @@
             </button>
           </div>
           <div class="filter-bar">
+            <!-- Dealer-wise Filter (Admin & Contributor Only) -->
+            <div class="form-group" id="fg_filterDealer" style="margin-bottom: 0;">
+              <label for="filterDealer">🏢 Dealer</label>
+              <select id="filterDealer">
+                <option value="">All Dealers</option>
+              </select>
+            </div>
             <div class="form-group" style="margin-bottom: 0;">
               <label for="filterUpazila">Upazila</label>
               <select id="filterUpazila">
-                <option value="">All Upazilas</option>
+                <option value="">All Upazilas (Ukhiya)</option>
+                <option value="Ukhiya">Ukhiya</option>
               </select>
             </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label for="filterUnion">Union</label>
             <select id="filterUnion">
-              <option value="">All Unions</option>
+              <option value="">All Unions (Ukhiya)</option>
+              <option value="Raja Palong">Raja Palong</option>
+              <option value="Jalia Palong">Jalia Palong</option>
+              <option value="Palong Khali">Palong Khali</option>
+              <option value="Ratna Palong">Ratna Palong</option>
+              <option value="Holdia Palong">Holdia Palong</option>
             </select>
           </div>
           <div class="form-group" style="margin-bottom: 0;">
@@ -182,30 +206,30 @@
         <div class="metrics-grid">
           <!-- Metric 1: Number of Farmer received fertilizer -->
           <div class="metric-card metric-farmers">
-            <span class="metric-label">Farmers Received Fertilizer</span>
+            <span class="metric-label" id="metricFarmerLabel">Farmers Received Fertilizer</span>
             <span id="metricFarmerCount" class="metric-value">0</span>
-            <span class="metric-desc">Total unique farmers with fertilizer purchases</span>
+            <span id="metricFarmerDesc" class="metric-desc">Total unique farmers with fertilizer purchases</span>
           </div>
 
           <!-- Metric 2: Quantity (kg) of fertilizer sold -->
           <div class="metric-card metric-sales">
-            <span class="metric-label">Fertilizer Sold</span>
+            <span class="metric-label" id="metricSoldLabel">Fertilizer Sold</span>
             <span id="metricSoldKg" class="metric-value">0 <span style="font-size: 1.1rem; font-weight: 500;">kg</span></span>
-            <span class="metric-desc">Total fertilizer distributed (in kg)</span>
+            <span id="metricSoldDesc" class="metric-desc">Total fertilizer distributed (in kg)</span>
           </div>
 
           <!-- Metric 3: Stock status (kg) -->
           <div class="metric-card metric-stock">
-            <span class="metric-label">Current Stock Status</span>
+            <span class="metric-label" id="metricStockLabel">Current Stock Status</span>
             <span id="metricStockKg" class="metric-value">0 <span style="font-size: 1.1rem; font-weight: 500;">kg</span></span>
-            <span class="metric-desc">Available fertilizer across dealers</span>
+            <span id="metricStockDesc" class="metric-desc">Available fertilizer across dealers</span>
           </div>
         </div>
 
         <!-- Fertilizer Breakdown Table -->
         <div class="data-table-card">
           <div class="table-header">
-            <div class="table-title">🧪 Fertilizer Breakdown: Urea • TSP • MoP • DAP</div>
+            <div class="table-title" id="fertilizerTableTitle">🧪 Fertilizer Breakdown: Urea • TSP • MoP • DAP</div>
             <button type="button" id="btnRefreshDashboard" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem;">
               🔄 Refresh Data
             </button>
@@ -215,10 +239,10 @@
               <thead>
                 <tr>
                   <th>Fertilizer Name</th>
-                  <th>Total Sold (kg)</th>
                   <th>Opening Stock (kg)</th>
-                  <th>Closing Stock (kg)</th>
-                  <th>Net Balance Status (kg)</th>
+                  <th>Received (kg)</th>
+                  <th>Fertilizer Sold / Issued (kg)</th>
+                  <th style="color:#60a5fa;">Closing Stock (kg)</th>
                 </tr>
               </thead>
               <tbody id="fertilizerStatsBody">
@@ -236,9 +260,9 @@
         <div class="data-table-card" id="summaryReportCard">
           <div class="table-header" style="flex-wrap: wrap; gap: 12px;">
             <div>
-              <div class="table-title">📈 Summary Report</div>
+              <div class="table-title" id="summaryReportTitle">📈 Summary Report</div>
               <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
-                Farmers received fertilizer, fertilizer sold & stock status breakdown
+                Farmers received fertilizer, fertilizer sold & stock status breakdown (Closing = Opening + Received - Issued)
               </div>
             </div>
             
@@ -272,10 +296,10 @@
                   <th>Block</th>
                   <th>Ward</th>
                   <th style="text-align: right;">Farmers Received</th>
-                  <th style="text-align: right;">Fertilizer Sold (kg)</th>
                   <th style="text-align: right;">Opening Stock (kg)</th>
-                  <th style="text-align: right;">Closing Stock (kg)</th>
-                  <th style="text-align: right;">Current Stock Balance (kg)</th>
+                  <th style="text-align: right;">Received (kg)</th>
+                  <th style="text-align: right;">Sold / Issued (kg)</th>
+                  <th style="text-align: right; color:#60a5fa;">Closing Stock (kg)</th>
                 </tr>
               </thead>
               <tbody id="summaryTableBody">
@@ -296,7 +320,7 @@
         <div class="data-table-card" id="salesRecordsCard">
           <div class="table-header" style="flex-wrap: wrap; gap: 12px;">
             <div>
-              <div class="table-title">📋 Recent Sales Records</div>
+              <div class="table-title" id="recentSalesTitle">📋 Recent Sales Records</div>
               <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
                 Transactions filtered by location and date
               </div>
@@ -339,7 +363,7 @@
           <div class="table-header" style="flex-direction: column; align-items: stretch; gap: 14px;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
               <div>
-                <div class="table-title">👨‍🌾 Registered Farmers Directory</div>
+                <div class="table-title" id="farmersDirectoryTitle">👨‍🌾 Registered Farmers Directory</div>
                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
                   Filtered by selected Upazila / Union / Block / Ward
                 </div>
@@ -397,6 +421,33 @@
             </div>
           </div>
 
+          <!-- Raw Farmer List Quick Lookup -->
+          <div class="raw-farmer-search-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(30, 58, 138, 0.18)); border: 1.5px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 18px 20px; margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+              <div style="font-weight: 600; font-size: 1rem; color: #6ee7b7; display: flex; align-items: center; gap: 8px;">
+                <span>🔎</span> Search Raw Farmer List (Reference)
+              </div>
+              <span style="font-size: 0.8rem; background: rgba(16, 185, 129, 0.2); color: #a7f3d0; padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(16, 185, 129, 0.4); font-weight: 500;">
+                Auto-fills Part 1 to 4
+              </span>
+            </div>
+            <p style="font-size: 0.84rem; color: #9ca3af; margin-bottom: 12px; line-height: 1.45;">
+              Search reference list by <strong>NID</strong> or <strong>Mobile number</strong>. If found, basic info (1 to 4) auto-fills and you only fill remaining fields (5 to 8). If not found, you can type basic info (1 to 4) manually.
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 240px;">
+                <input type="text" id="rawFarmerSearchInput" placeholder="Enter NID or Mobile number to search..." style="width: 100%; padding: 11px 14px; border-radius: 8px; border: 1.5px solid #243c64; background: #0b1524; color: #ffffff;" />
+              </div>
+              <button type="button" id="btnSearchRawFarmer" class="btn btn-primary" style="padding: 10px 22px;">
+                <span>🔍 Search</span>
+              </button>
+              <button type="button" id="btnClearRawSearch" class="btn btn-secondary" style="padding: 10px 16px;" title="Clear search">
+                Clear
+              </button>
+            </div>
+            <div id="rawSearchStatus" style="margin-top: 12px; display: none; font-size: 0.88rem; padding: 11px 15px; border-radius: 6px; line-height: 1.45;"></div>
+          </div>
+
           <form id="formFarmer">
             <!-- 1. Farmer's Name -->
             <div class="form-group">
@@ -428,16 +479,7 @@
                 <div class="form-group">
                   <label for="f_upazila">• Upazila <span class="req">*</span></label>
                   <select id="f_upazila" required>
-                    <option value="">Select Upazila</option>
-                    <option value="Ukhiya">Ukhiya</option>
-                    <option value="Cox's Bazar Sadar">Cox's Bazar Sadar</option>
-                    <option value="Teknaf">Teknaf</option>
-                    <option value="Ramu">Ramu</option>
-                    <option value="Chakaria">Chakaria</option>
-                    <option value="Moheshkhali">Moheshkhali</option>
-                    <option value="Kutubdia">Kutubdia</option>
-                    <option value="Pekua">Pekua</option>
-                    <option value="Eidgaon">Eidgaon</option>
+                    <option value="Ukhiya" selected>Ukhiya</option>
                   </select>
                 </div>
                 <div class="form-group">
@@ -581,65 +623,6 @@
       </section>
 
       <!-- ======================================================== -->
-      <!-- VIEW: ADD SALES                                          -->
-      <!-- ======================================================== -->
-      <section id="viewForm2" class="view-content hidden">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h2 class="card-title">📦 Add sales</h2>
-              <p class="card-desc">Record fertilizer sale distribution to registered farmers.</p>
-            </div>
-          </div>
-
-          <form id="formSales">
-            <div class="form-grid">
-              <!-- Select Farmer -->
-              <div class="form-group full-width">
-                <label for="s_farmer_id">Select Farmer <span class="req">*</span></label>
-                <select id="s_farmer_id" required>
-                  <option value="">-- Choose Registered Farmer (Search by NID/Name) --</option>
-                </select>
-              </div>
-
-              <!-- Date of Sale -->
-              <div class="form-group">
-                <label for="s_date">• Date of Sale <span class="req">*</span></label>
-                <input type="date" id="s_date" required />
-              </div>
-
-              <!-- Serial no. of register record -->
-              <div class="form-group">
-                <label for="s_serial">• Serial no. of Register Record <span class="req">*</span></label>
-                <input type="text" id="s_serial" placeholder="e.g. REG-BOOK-042" required />
-              </div>
-
-              <!-- Name of Fertilizer: Urea/TSP/MoP/DAP -->
-              <div class="form-group">
-                <label for="s_fertilizer">• Name of Fertilizer <span class="req">*</span></label>
-                <select id="s_fertilizer" required>
-                  <option value="Urea">Urea</option>
-                  <option value="TSP">TSP</option>
-                  <option value="MoP">MoP</option>
-                  <option value="DAP">DAP</option>
-                </select>
-              </div>
-
-              <!-- Quantity(kg) of Fertilizer received -->
-              <div class="form-group">
-                <label for="s_quantity">• Quantity (kg) of Fertilizer Received <span class="req">*</span></label>
-                <input type="number" id="s_quantity" step="0.5" min="0.5" placeholder="e.g. 50" required />
-              </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
-              💾 Record Fertilizer Sale
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <!-- ======================================================== -->
       <!-- VIEW: STOCK REGISTER                                     -->
       <!-- ======================================================== -->
       <section id="viewForm3" class="view-content hidden">
@@ -647,30 +630,27 @@
           <div class="card-header">
             <div>
               <h2 class="card-title">📑 Stock register</h2>
-              <p class="card-desc">Daily fertilizer stock balance register (Opening and Closing status).</p>
+              <p class="card-desc">Daily fertilizer stock balance register. Closing Stock = Opening Stock + Received - Issued.</p>
             </div>
+          </div>
+
+          <!-- Formula Banner -->
+          <div style="margin-bottom: 20px; padding: 12px 16px; background: rgba(37, 99, 235, 0.15); border: 1.5px solid #2563eb; border-radius: 8px; font-size: 0.88rem; color: #93c5fd; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.1rem;">📐</span>
+            <span><strong>Stock Register Formula:</strong> <code>Closing Stock = Opening Stock + Received - Issued</code></span>
           </div>
 
           <form id="formRegister">
             <div class="form-grid">
-              <!-- Register Date -->
+              <!-- 1. Transaction Date -->
               <div class="form-group">
-                <label for="r_date">Date <span class="req">*</span></label>
+                <label for="r_date">Transaction Date <span class="req">*</span></label>
                 <input type="date" id="r_date" required />
               </div>
 
-              <!-- Status Type: Opening / Closing -->
+              <!-- 2. Fertilizer Name -->
               <div class="form-group">
-                <label for="r_status_type">Status Type <span class="req">*</span></label>
-                <select id="r_status_type" required>
-                  <option value="Opening">1. Opening Status</option>
-                  <option value="Closing">2. Closing Status</option>
-                </select>
-              </div>
-
-              <!-- Name of Fertilizer: Urea/TSP/MoP/DAP -->
-              <div class="form-group">
-                <label for="r_fertilizer">• Name of Fertilizer <span class="req">*</span></label>
+                <label for="r_fertilizer">Fertilizer Name <span class="req">*</span></label>
                 <select id="r_fertilizer" required>
                   <option value="Urea">Urea</option>
                   <option value="TSP">TSP</option>
@@ -679,34 +659,77 @@
                 </select>
               </div>
 
-              <!-- Quantity(kg) of Fertilizer -->
+              <!-- 3. Transaction Type -->
               <div class="form-group">
-                <label for="r_quantity">• Quantity (kg) of Fertilizer <span class="req">*</span></label>
-                <input type="number" id="r_quantity" step="0.1" min="0" placeholder="e.g. 500" required />
+                <label for="r_transaction_type">Transaction Type <span class="req">*</span></label>
+                <select id="r_transaction_type" required>
+                  <option value="OPENING" selected>OPENING</option>
+                  <option value="RECEIVED">RECEIVED</option>
+                  <option value="ISSUED">ISSUED</option>
+                </select>
+              </div>
+
+              <!-- 4. Reference No. -->
+              <div class="form-group">
+                <label for="r_reference_no">Reference No. <span class="req">*</span></label>
+                <input type="text" id="r_reference_no" value="Opening Balance" placeholder="e.g. Opening Balance, Challan No, Memo No" required />
+              </div>
+
+              <!-- Registered Farmer Dropdown (active when ISSUED / Sales) -->
+              <div class="form-group full-width" id="fg_farmer_select" style="display: none;">
+                <label for="r_farmer_id">Select Registered Farmer <span class="req">*</span></label>
+                <select id="r_farmer_id">
+                  <option value="">-- Choose Registered Farmer (Search by NID/Name) --</option>
+                </select>
+              </div>
+
+              <!-- 7. Received Qty -->
+              <div class="form-group" id="fg_received_qty">
+                <label for="r_received_qty">Received Qty (kg) <span class="req">*</span></label>
+                <input type="number" id="r_received_qty" step="0.1" min="0" value="500" placeholder="0" />
+              </div>
+
+              <!-- 8. Issued Qty -->
+              <div class="form-group" id="fg_issued_qty" style="display: none;">
+                <label for="r_issued_qty">Issued Qty (kg) <span class="req">*</span></label>
+                <input type="number" id="r_issued_qty" step="0.1" min="0" value="0" placeholder="0" />
+              </div>
+
+              <!-- 9. Remarks -->
+              <div class="form-group full-width">
+                <label for="r_remarks">Remarks</label>
+                <input type="text" id="r_remarks" value="Initial stock balance" placeholder="e.g. Initial stock balance" />
               </div>
             </div>
 
             <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
-              💾 Save Register Entry
+              💾 Save Transaction Entry
             </button>
           </form>
 
-          <!-- Current Dealer's Register History -->
+          <!-- Current Dealer's Stock Register History -->
           <div style="margin-top: 32px;">
-            <h3 style="font-size: 1rem; margin-bottom: 12px; color:#d1d5db;">Recent Register Records</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <h3 style="font-size: 1rem; color:#d1d5db;">Stock Register (Closing Stock = Opening Stock + Received - Issued)</h3>
+            </div>
             <div class="responsive-table">
               <table>
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Status Type</th>
-                    <th>Fertilizer</th>
-                    <th>Quantity (kg)</th>
+                    <th>Transaction Date</th>
+                    <th>Fertilizer Name</th>
+                    <th>Type</th>
+                    <th>Reference No.</th>
+                    <th>Farmer</th>
+                    <th style="text-align: right; color:#34d399;">Received Qty (kg)</th>
+                    <th style="text-align: right; color:#f87171;">Issued Qty (kg)</th>
+                    <th style="text-align: right; color:#60a5fa; font-weight:700;">Closing Stock (kg)</th>
+                    <th>Remarks</th>
                   </tr>
                 </thead>
                 <tbody id="dealerRegisterTableBody">
                   <tr>
-                    <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 18px;">
+                    <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 18px;">
                       No register entries yet.
                     </td>
                   </tr>
@@ -758,16 +781,7 @@
               <div class="form-group">
                 <label for="d_upazila">• Upazila <span class="req">*</span></label>
                 <select id="d_upazila" required>
-                  <option value="">Select Upazila</option>
-                  <option value="Ukhiya">Ukhiya</option>
-                  <option value="Cox's Bazar Sadar">Cox's Bazar Sadar</option>
-                  <option value="Teknaf">Teknaf</option>
-                  <option value="Ramu">Ramu</option>
-                  <option value="Chakaria">Chakaria</option>
-                  <option value="Moheshkhali">Moheshkhali</option>
-                  <option value="Kutubdia">Kutubdia</option>
-                  <option value="Pekua">Pekua</option>
-                  <option value="Eidgaon">Eidgaon</option>
+                  <option value="Ukhiya" selected>Ukhiya</option>
                 </select>
               </div>
 

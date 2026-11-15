@@ -13,12 +13,24 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+export const isValidUUID = (str) =>
+  typeof str === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+
 // Current logged in session helper (in localStorage)
 export const Session = {
   get() {
     try {
       const data = localStorage.getItem('agri_auth_session');
-      return data ? JSON.parse(data) : null;
+      if (!data) return null;
+      const user = JSON.parse(data);
+      // Auto-clear stale demo sessions with non-UUID identifiers when live Supabase is active
+      if (isSupabaseConfigured && user?.role === 'dealer' && user.dealer && !isValidUUID(user.dealer.id)) {
+        console.warn('Clearing stale demo session with invalid UUID:', user.dealer.id);
+        localStorage.removeItem('agri_auth_session');
+        return null;
+      }
+      return user;
     } catch {
       return null;
     }

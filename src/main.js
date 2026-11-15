@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured, Session } from './supabase.js';
+import { supabase, isSupabaseConfigured, Session, isValidUUID } from './supabase.js';
 
 // Global State
 let currentUser = Session.get(); // { role: 'dealer'|'admin'|'superadmin'|'contributor', dealer: {...}, contributor: {...} }
@@ -309,7 +309,7 @@ loginForm.addEventListener('submit', async (e) => {
       // Mock fallback if offline
       currentUser = {
         role: 'dealer',
-        dealer: { id: 'demo-1', registration_number: regNo, dealer_name: 'Demo Dealer Enterprise', upazila: 'Ukhiya', union_name: 'Raja Palong' }
+        dealer: { id: '00000000-0000-0000-0000-000000000001', registration_number: regNo, dealer_name: 'Demo Dealer Enterprise', upazila: 'Ukhiya', union_name: 'Raja Palong' }
       };
       Session.set(currentUser);
       updateAuthUI();
@@ -745,7 +745,7 @@ formFarmer.addEventListener('submit', async (e) => {
   const cropType = document.querySelector('input[name="crop_type"]:checked').value;
 
   const farmerPayload = {
-    dealer_id: currentUser?.dealer?.id || null,
+    dealer_id: isValidUUID(currentUser?.dealer?.id) ? currentUser.dealer.id : null,
     farmer_name: document.getElementById('f_name').value.trim(),
     village: document.getElementById('f_village').value.trim(),
     block: document.getElementById('f_block').value,
@@ -892,22 +892,23 @@ async function loadDealerRegisterTable() {
   try {
     let txList = [];
     let query = supabase.from('transactions').select('*').order('transaction_date', { ascending: true }).order('created_at', { ascending: true });
-    if (currentUser?.dealer?.id) {
-      query = query.eq('dealer_id', currentUser.dealer.id);
+    const validDealerId = isValidUUID(currentUser?.dealer?.id) ? currentUser.dealer.id : null;
+    if (validDealerId) {
+      query = query.eq('dealer_id', validDealerId);
     }
     const { data, error } = await query;
     if (!error && data && data.length > 0) {
       txList = data;
     } else {
       let queryAlt = supabase.from('Transaction').select('*').order('transaction_date', { ascending: true });
-      if (currentUser?.dealer?.id) queryAlt = queryAlt.eq('dealer_id', currentUser.dealer.id);
+      if (validDealerId) queryAlt = queryAlt.eq('dealer_id', validDealerId);
       const resAlt = await queryAlt;
       if (!resAlt.error && resAlt.data && resAlt.data.length > 0) {
         txList = resAlt.data;
       } else {
         txList = transactionsCache;
-        if (currentUser?.dealer?.id) {
-          txList = txList.filter(t => t.dealer_id === currentUser.dealer.id);
+        if (validDealerId) {
+          txList = txList.filter(t => t.dealer_id === validDealerId);
         }
       }
     }
@@ -1050,7 +1051,9 @@ if (formRegister) {
     const dateVal = document.getElementById('r_date').value;
 
     const txPayload = {
-      dealer_id: currentUser?.dealer?.id || dealersCache[0]?.id || null,
+      dealer_id: isValidUUID(currentUser?.dealer?.id) 
+        ? currentUser.dealer.id 
+        : (dealersCache.find(d => isValidUUID(d.id))?.id || null),
       transaction_date: dateVal,
       fertilizer_name: fertVal,
       transaction_type: type,
@@ -1374,7 +1377,7 @@ async function loadDashboardData() {
   }
 
   try {
-    const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+    const isDealer = currentUser?.role === 'dealer' && isValidUUID(currentUser.dealer?.id);
 
     // Parallel fetch of all related data:
     // All dealers are allowed to view and select all registered farmers registered by all dealers
@@ -1446,7 +1449,7 @@ const UKHIYA_UNIONS = [
 ];
 
 function populateFilterOptions() {
-  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+  const isDealer = currentUser?.role === 'dealer' && isValidUUID(currentUser.dealer?.id);
 
   // Populate Dealer-wise filter (Accessible for Admin and Contributor only)
   if (filterDealer) {
@@ -1477,7 +1480,7 @@ function populateFilterOptions() {
 }
 
 function computeAndRenderDashboard() {
-  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+  const isDealer = currentUser?.role === 'dealer' && isValidUUID(currentUser.dealer?.id);
   const selectedDealerId = !isDealer && filterDealer ? (filterDealer.value || '').trim() : '';
   const currentDealerId = isDealer ? currentUser.dealer.id : (selectedDealerId || null);
   const isFilteredToSpecificDealer = Boolean(currentDealerId);
@@ -1766,7 +1769,7 @@ function renderSummaryReport(filteredSales, matchingFarmers) {
   const dealerMap = new Map();
   dealersCache.forEach(d => dealerMap.set(d.id, d));
 
-  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+  const isDealer = currentUser?.role === 'dealer' && isValidUUID(currentUser.dealer?.id);
   const selectedDealerId = !isDealer && filterDealer ? (filterDealer.value || '').trim() : '';
   const currentDealerId = isDealer ? currentUser.dealer.id : (selectedDealerId || null);
   const isFilteredToSpecificDealer = Boolean(currentDealerId);
@@ -2285,7 +2288,7 @@ if (searchFarmerInput) {
 }
 
 btnResetFilters.addEventListener('click', () => {
-  const isDealer = currentUser?.role === 'dealer' && currentUser.dealer?.id;
+  const isDealer = currentUser?.role === 'dealer' && isValidUUID(currentUser.dealer?.id);
   if (isDealer) {
     filterUpazila.value = currentUser.dealer.upazila || '';
     filterUnion.value = currentUser.dealer.union_name || '';

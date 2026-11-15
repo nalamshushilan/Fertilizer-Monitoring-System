@@ -1514,7 +1514,11 @@ function computeAndRenderDashboard() {
   // Filter Farmers by geographic selection
   const matchingFarmers = scopedFarmers.filter(f => {
     if (upazilaVal && (f.upazila || '').toLowerCase() !== upazilaVal) return false;
-    if (unionVal && (f.union_name || '').toLowerCase() !== unionVal) return false;
+    if (unionVal) {
+      const u1 = (f.union_name || '').toLowerCase().replace(/\s+/g, '');
+      const u2 = unionVal.toLowerCase().replace(/\s+/g, '');
+      if (u1 !== u2 && !(f.union_name || '').toLowerCase().includes(unionVal)) return false;
+    }
     if (blockVal && String(f.block) !== blockVal) return false;
     if (wardVal && !(f.ward || '').toLowerCase().includes(wardVal)) return false;
     return true;

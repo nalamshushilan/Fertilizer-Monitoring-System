@@ -24,9 +24,9 @@ export const Session = {
       const data = localStorage.getItem('agri_auth_session');
       if (!data) return null;
       const user = JSON.parse(data);
-      // Auto-clear stale demo sessions with non-UUID identifiers when live Supabase is active
-      if (isSupabaseConfigured && user?.role === 'dealer' && user.dealer && !isValidUUID(user.dealer.id)) {
-        console.warn('Clearing stale demo session with invalid UUID:', user.dealer.id);
+      // Unconditionally purge any stale demo session with non-UUID identifiers (e.g. 'demo-1')
+      if (user?.dealer?.id && !isValidUUID(user.dealer.id)) {
+        console.warn('Purged invalid dealer session from storage:', user.dealer.id);
         localStorage.removeItem('agri_auth_session');
         return null;
       }

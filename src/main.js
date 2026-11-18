@@ -744,8 +744,10 @@ formFarmer.addEventListener('submit', async (e) => {
   const landType = document.querySelector('input[name="land_type"]:checked').value;
   const cropType = document.querySelector('input[name="crop_type"]:checked').value;
 
+  const rawDealerId = currentUser?.dealer?.id;
+  const validDealerId = isValidUUID(rawDealerId) ? rawDealerId : null;
+
   const farmerPayload = {
-    dealer_id: isValidUUID(currentUser?.dealer?.id) ? currentUser.dealer.id : null,
     farmer_name: document.getElementById('f_name').value.trim(),
     village: document.getElementById('f_village').value.trim(),
     block: document.getElementById('f_block').value,
@@ -767,6 +769,10 @@ formFarmer.addEventListener('submit', async (e) => {
     crop_type: cropType,
     crop_other_details: cropType === 'Others' ? document.getElementById('f_other_crop').value.trim() : null
   };
+
+  if (validDealerId) {
+    farmerPayload.dealer_id = validDealerId;
+  }
 
   if (!isSupabaseConfigured) {
     farmersCache.unshift({ id: 'f-' + Date.now(), ...farmerPayload });
@@ -1050,10 +1056,10 @@ if (formRegister) {
     const fertVal = document.getElementById('r_fertilizer').value;
     const dateVal = document.getElementById('r_date').value;
 
+    const rawTxDealer = currentUser?.dealer?.id;
+    const validTxDealer = isValidUUID(rawTxDealer) ? rawTxDealer : (dealersCache.find(d => isValidUUID(d.id))?.id || null);
+
     const txPayload = {
-      dealer_id: isValidUUID(currentUser?.dealer?.id) 
-        ? currentUser.dealer.id 
-        : (dealersCache.find(d => isValidUUID(d.id))?.id || null),
       transaction_date: dateVal,
       fertilizer_name: fertVal,
       transaction_type: type,
@@ -1063,6 +1069,10 @@ if (formRegister) {
       issued_qty: issQty,
       remarks: remarksVal
     };
+
+    if (validTxDealer) {
+      txPayload.dealer_id = validTxDealer;
+    }
 
     if (!isSupabaseConfigured) {
       txPayload.id = 'tx-' + Date.now();
